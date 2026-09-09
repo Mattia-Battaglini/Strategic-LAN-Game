@@ -1,0 +1,17 @@
+{
+  "name": "strategic-game-lan",
+  "version": "1.0.0",
+  "description": "4X Lite multiplayer LAN — Node.js + Express + Socket.io + HTML5 Canvas",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "smoke": "node test/smoke.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.7.5"
+  }
+}

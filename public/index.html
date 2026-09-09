@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>4X Lite — LAN</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ============ LOBBY ============ -->
+  <div id="lobby">
+    <h1>⚔️ 4X Lite (LAN)</h1>
+    <p class="sub">eXplore · eXpand · eXploit · eXterminate</p>
+    <input id="nameInput" placeholder="Il tuo nome" maxlength="12" />
+    <button id="joinBtn">Unisciti alla partita</button>
+    <ul id="lobbyList"></ul>
+    <button id="startBtn" style="display:none">🚀 Avvia Partita (Host)</button>
+  </div>
+
+  <!-- ============ GIOCO ============ -->
+  <div id="game" class="hidden">
+    <div id="topbar">
+      <h1>⚔️ 4X Lite</h1>
+      <span id="roundInfo" class="hud-chip"></span>
+      <span id="goldInfo" class="hud-chip"></span>
+      <span id="turnInfo" class="hud-chip"></span>
+      <button id="endTurnBtn">Fine Turno ⏭</button>
+    </div>
+
+    <div id="mainRow">
+      <canvas id="board" width="640" height="640"></canvas>
+      <aside id="sidePanel">
+        <h3>Info</h3>
+        <div id="unitInfo">Seleziona un'unità o una città.</div>
+        <div id="buyPanel" class="hidden"></div>
+        <h3 style="margin-top:14px">Log</h3>
+        <ul id="log"></ul>
+      </aside>
+    </div>
+
+    <!-- Game over -->
+    <div id="overlay" class="hidden">
+      <div id="overlayBox">
+        <h2 id="winnerText"></h2>
+        <button id="newGameBtn">🔄 Nuova Partita</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
