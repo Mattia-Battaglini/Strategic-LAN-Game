@@ -12,10 +12,40 @@
   <div id="lobby">
     <h1>⚔️ 4X Lite (LAN)</h1>
     <p class="sub">eXplore · eXpand · eXploit · eXterminate</p>
+    <!-- Stato connessione al server: visibile se il socket non è connesso -->
+    <div id="connStatus" class="hidden">⚠️ Disconnesso dal server — ricarica la pagina o riavvia il server.</div>
     <input id="nameInput" placeholder="Il tuo nome" maxlength="12" />
     <button id="joinBtn">Unisciti alla partita</button>
+
+    <!-- Selezione fazione pre-partita -->
+    <div id="factionBox">
+      <label for="factionSelect">La tua fazione:</label>
+      <select id="factionSelect"><option value="">— scegli una fazione —</option></select>
+      <p id="factionDesc" class="sub"></p>
+    </div>
+
     <ul id="lobbyList"></ul>
+
+    <!-- Configurazione generazione mondo (visibile solo all'host) -->
+    <div id="configPanel" class="hidden">
+      <h3>⚙️ Generazione mondo (Host)</h3>
+      <label>Dimensione mappa:
+        <select id="mapSizeSel">
+          <option value="12">12 × 12</option>
+          <option value="16" selected>16 × 16</option>
+          <option value="20">20 × 20</option>
+          <option value="24">24 × 24</option>
+        </select>
+      </label>
+      <label>Acqua: <input type="range" id="waterRange" min="5" max="70" step="1" value="38"><span class="rangeVal" id="waterVal"></span></label>
+      <label>Montagne: <input type="range" id="mountainRange" min="5" max="40" step="1" value="25"><span class="rangeVal" id="mountainVal"></span></label>
+      <label>Foresta: <input type="range" id="forestRange" min="5" max="80" step="1" value="40"><span class="rangeVal" id="forestVal"></span></label>
+      <label>Villaggi: <input type="range" id="villageRange" min="0" max="12" step="1" value="4"><span class="rangeVal" id="villageVal"></span></label>
+    </div>
+
     <button id="startBtn" style="display:none">🚀 Avvia Partita (Host)</button>
+    <!-- Errori della lobby visibili (prima andavano nel log nascosto del gioco) -->
+    <p id="lobbyError" class="lobby-error"></p>
   </div>
 
   <!-- ============ GIOCO ============ -->
@@ -25,7 +55,15 @@
       <span id="roundInfo" class="hud-chip"></span>
       <span id="goldInfo" class="hud-chip"></span>
       <span id="turnInfo" class="hud-chip"></span>
+      <button id="undoBtn" disabled title="Annulla l'ultima mossa del tuo turno">↩️ Annulla Mossa</button>
       <button id="endTurnBtn">Fine Turno ⏭</button>
+      <button id="adminBtn" class="hidden admin-btn">🛡️ Admin (Host)</button>
+    </div>
+
+    <!-- Menù admin riservato all'host: espelli giocatori dalla partita -->
+    <div id="adminPanel" class="hidden">
+      <b>Admin — espelli un giocatore</b>
+      <ul id="adminList"></ul>
     </div>
 
     <div id="mainRow">

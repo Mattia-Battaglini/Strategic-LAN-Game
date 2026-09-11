@@ -1,6 +1,6 @@
 // ============================================================
 // DB IN-MEMORY — tabelle "relazionali" (stesso modello di SQLite)
-// TABELLE: Game, Players, Tiles, TileVisibility, Cities, Units
+// TABELLE: Game, Players, Tiles, TileVisibility, Cities, Villages, Units
 // Ogni tabella ha PK autoincrement `id`. Per passare a SQLite reale
 // basta sostituire questa classe con better-sqlite3: lo schema
 // delle tabelle resta identico (vedi README).
@@ -28,6 +28,17 @@ class Table {
     return r;
   }
   remove(id) { return this.rows.delete(id); }
+  // Sostituisce TUTTE le righe con quelle date (usato per il restore degli
+  // snapshot di undo): i PK originali sono preservati.
+  load(rows) {
+    this.rows = new Map();
+    this._seq = 0;
+    for (const r of rows || []) {
+      const copy = Object.assign({}, r);
+      this.rows.set(copy.id, copy);
+      if (copy.id > this._seq) this._seq = copy.id;
+    }
+  }
 }
 
 class DB {
@@ -37,7 +48,8 @@ class DB {
     this.Players        = new Table('Players');         // giocatori
     this.Tiles          = new Table('Tiles');           // caselle mappa
     this.TileVisibility = new Table('TileVisibility');  // nebbia di guerra (tile_id, player_id)
-    this.Cities         = new Table('Cities');          // città
+    this.Cities         = new Table('Cities');          // città (owner_id NULL = neutra)
+    this.Villages       = new Table('Villages');        // villaggi neutrali/conquistabili (owner_id NULL)
     this.Units          = new Table('Units');           // unità militari
   }
 }

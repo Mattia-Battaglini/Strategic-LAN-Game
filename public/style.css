@@ -23,7 +23,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 #endTurnBtn.cancel-mode:hover { background: #c74632; }
 
 /* ---------- LOBBY ---------- */
-#lobby { text-align: center; margin-top: 13vh; width: 340px; }
+#lobby { text-align: center; margin-top: 8vh; width: 380px; }
 #lobby h1 { font-size: 28px; margin-bottom: 4px; }
 #lobby p.sub { color: #9aa4b2; margin-bottom: 18px; font-size: 13px; letter-spacing: .05em; }
 #nameInput {
@@ -31,18 +31,57 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   border: 1px solid #3a4150; background: #1d222b; color: #fff;
   font-size: 15px; margin-bottom: 10px;
 }
+#factionBox { margin-top: 6px; }
+#factionSelect {
+  width: 100%; padding: 9px 12px; border-radius: 8px;
+  border: 1px solid #3a4150; background: #1d222b; color: #fff;
+  font-size: 14px; margin-bottom: 6px; cursor: pointer;
+}
+#factionDesc { min-height: 18px; }
 #lobbyList { list-style: none; margin: 18px 0; min-height: 26px; }
 #lobbyList li {
-  padding: 6px 12px; margin: 4px 3px; display: inline-block;
+  padding: 6px 12px; margin: 4px 3px; display: inline-flex; align-items: center; gap: 6px;
   background: #1d222b; border-radius: 6px; font-size: 13px;
 }
+.faction-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* Pannello configurazione generazione mondo (solo host) */
+#configPanel {
+  text-align: left; background: #1d222b; border-radius: 10px;
+  padding: 14px 16px; margin: 14px 0; font-size: 13px;
+}
+#configPanel h3 { color: #9aa4b2; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; margin-bottom: 10px; }
+#configPanel label { display: flex; align-items: center; gap: 8px; margin: 7px 0; color: #c6ccd6; }
+#configPanel select {
+  padding: 5px 8px; border-radius: 6px; border: 1px solid #3a4150;
+  background: #242b37; color: #fff; font-size: 13px; margin-left: auto;
+}
+#configPanel input[type=range] { flex: 1; accent-color: #3d7eff; }
+.rangeVal { min-width: 38px; text-align: right; color: #9aa4b2; font-variant-numeric: tabular-nums; }
+
+/* Pulsante espelli (admin) */
+.kickBtn {
+  padding: 1px 7px; font-size: 12px; border-radius: 5px;
+  background: #e0533d; color: #fff; line-height: 1.4;
+}
+.kickBtn:hover { background: #c74632; }
 
 /* ---------- GIOCO ---------- */
 #game { width: 100%; max-width: 980px; padding: 14px; }
-#topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+#topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 #topbar h1 { font-size: 20px; margin-right: auto; }
 .hud-chip { background: #1d222b; padding: 6px 12px; border-radius: 8px; font-size: 14px; }
 #turnInfo.you { color: #7ee787; font-weight: 700; }
+
+/* Menù admin host (in partita) */
+.admin-btn { background: #6c5ce7; }
+.admin-btn:hover { background: #5a4bd1; }
+#adminPanel {
+  background: #241f33; border: 1px solid #4a3f6b; border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 12px; font-size: 13px;
+}
+#adminList { list-style: none; margin-top: 8px; }
+#adminList li { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
 
 #mainRow { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
 canvas { background: #10131a; border-radius: 8px; cursor: pointer; max-width: 100%; height: auto; }
@@ -60,3 +99,12 @@ canvas { background: #10131a; border-radius: 8px; cursor: pointer; max-width: 10
 #overlay { position: fixed; inset: 0; background: rgba(10, 12, 16, .8); display: flex; align-items: center; justify-content: center; z-index: 10; }
 #overlayBox { background: #1d222b; padding: 34px 44px; border-radius: 14px; text-align: center; }
 #winnerText { margin-bottom: 18px; font-size: 24px; }
+
+/* ---------- STATO CONNESSIONE + ERRORI LOBBY ---------- */
+#connStatus {
+  background: #3a2020; border: 1px solid #e0533d; color: #ffb4a8;
+  padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
+}
+.lobby-error {
+  min-height: 20px; margin-top: 12px; color: #ff8a75; font-size: 13px; line-height: 1.4;
+}

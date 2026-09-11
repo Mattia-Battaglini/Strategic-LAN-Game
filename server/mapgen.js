@@ -1,7 +1,8 @@
 // ============================================================
-// GENERAZIONE PROCEDURALE DELLA MAPPA
-// PRNG seedato (mulberry32) + value noise bilineare su griglia
-// grossolana -> campi elevazione/umidita' in [0,1] -> biomi.
+// GENERAZIONE PROCEDURALE DELLA MAPPA (parametrizzabile pre-partita)
+// PRNG seedato (mulberry32) + value noise bilineare -> biomi.
+// opts: { water, mountain, forest } = frazioni [0..1] della mappa;
+// i villaggi sono piazzati a parte con findVillages().
 // Biomi: water | plains | forest | mountain
 // ============================================================
 
@@ -14,7 +15,7 @@ function mulberry32(seed) {
   };
 }
 
-// Value noise: griglia casuale grossolana interpolata bilineamente
+// Value noise: griglia casuale grossolana interpolata bilineamente -> campo [0,1]
 function valueNoise(size, seed, coarse = 5) {
   const rnd = mulberry32(seed);
   const grid = Array.from({ length: coarse + 1 }, () =>
@@ -38,16 +39,27 @@ function valueNoise(size, seed, coarse = 5) {
 
 const BIOME = { WATER: 'water', PLAINS: 'plains', FOREST: 'forest', MOUNTAIN: 'mountain' };
 
-function generateMap(size, seed) {
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function opt(opts, key, dflt) { return opts && opts[key] != null ? opts[key] : dflt; }
+
+// Densità configurabili (frazioni [0..1]):
+//   water    -> elev < water                    (acqua)
+//   mountain -> elev > 1 - mountain             (montagne)
+//   forest   -> frazione di TERRA che e' foresta (moist > 1 - forest)
+function generateMap(size, seed, opts = {}) {
+  const water = clamp(opt(opts, 'water', 0.38), 0.05, 0.7);
+  const mountain = clamp(opt(opts, 'mountain', 0.25), 0.05, 0.4);
+  const forest = clamp(opt(opts, 'forest', 0.4), 0.05, 0.8);
+
   const elev = valueNoise(size, (seed * 7 + 1) >>> 0);
   const moist = valueNoise(size, (seed * 13 + 5) >>> 0);
   const tiles = []; // [y][x] -> biome
   for (let y = 0; y < size; y++) {
     const row = [];
     for (let x = 0; x < size; x++) {
-      if (elev[y][x] < 0.38) row.push(BIOME.WATER);
-      else if (elev[y][x] > 0.75) row.push(BIOME.MOUNTAIN);
-      else if (moist[y][x] > 0.62) row.push(BIOME.FOREST);
+      if (elev[y][x] < water) row.push(BIOME.WATER);
+      else if (elev[y][x] > 1 - mountain) row.push(BIOME.MOUNTAIN);
+      else if (moist[y][x] > 1 - forest) row.push(BIOME.FOREST);
       else row.push(BIOME.PLAINS);
     }
     tiles.push(row);
@@ -93,4 +105,34 @@ function findSpawns(tiles, count) {
   return spawns;
 }
 
-module.exports = { generateMap, findSpawns, BIOME };
+// Villaggi: caselle terrestri lontane dagli spawn (dist Manhattan >= 4)
+// e tra loro, scelte con massimizzazione della distanza reciproca.
+function findVillages(tiles, spawns, count) {
+  const size = tiles.length;
+  if (!count || count <= 0) return [];
+  const candidates = [];
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      if (tiles[y][x] !== BIOME.PLAINS && tiles[y][x] !== BIOME.FOREST) continue;
+      const nearSpawn = spawns.some(s => Math.abs(s.x - x) + Math.abs(s.y - y) < 4);
+      if (!nearSpawn) candidates.push({ x, y });
+    }
+
+  const out = [];
+  let guard = count * 5000;
+  while (out.length < count && guard-- > 0) {
+    let best = null, bestScore = -1;
+    for (const c of candidates) {
+      if (out.some(v => v.x === c.x && v.y === c.y)) continue;
+      const dMin = out.length
+        ? Math.min(...out.map(v => Math.abs(v.x - c.x) + Math.abs(v.y - c.y)))
+        : 999;
+      if (dMin > bestScore) { bestScore = dMin; best = c; }
+    }
+    if (!best) break;
+    out.push(best);
+  }
+  return out;
+}
+
+module.exports = { generateMap, findSpawns, findVillages, BIOME };
