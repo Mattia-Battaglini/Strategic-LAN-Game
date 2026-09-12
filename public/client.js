@@ -52,7 +52,7 @@ let lobbyErrorTimer = null;
 function showLobbyError(msg) {
   const el = document.getElementById('lobbyError');
   // .lobby-error e' flex con gap: niente spazi testuali liberi (creerebbero item anonimi extra)
-  el.innerHTML = ICONS.svg('warning', 14) + esc(msg);
+  el.innerHTML = ICONS.svg('warning', 26) + esc(msg);
   clearTimeout(lobbyErrorTimer);
   lobbyErrorTimer = setTimeout(() => { el.innerHTML = ''; }, 8000);
 }
@@ -216,7 +216,7 @@ function renderLobby(players, canStart) {
     badge.className = 'faction-dot';
     if (pl.faction) {
       // Emblema SVG della fazione (audit §3) al posto del cerchio piatto
-      badge.innerHTML = ICONS.svg('emb-' + pl.faction, 14);
+      badge.innerHTML = ICONS.svg('emb-' + pl.faction, 26);
       badge.style.color = FACTION_META[pl.faction].color;
     } else {
       badge.style.background = '#555c68';
@@ -224,13 +224,13 @@ function renderLobby(players, canStart) {
     badge.title = pl.faction ? FACTION_META[pl.faction].name : 'nessuna fazione';
     li.appendChild(badge);
     const label = document.createElement('span');
-    label.innerHTML = esc(pl.name) + (pl.isHost ? ' ' + ICONS.svg('crown', 14) : '');
+    label.innerHTML = esc(pl.name) + (pl.isHost ? ' ' + ICONS.svg('crown', 26) : '');
     li.appendChild(label);
     // Admin: l'host puo' espellere gli altri dalla stanza
     if (canStart && pl.socketId !== socket.id) {
       const kick = document.createElement('button');
       kick.className = 'kickBtn';
-      kick.innerHTML = ICONS.svg('close', 12);
+      kick.innerHTML = ICONS.svg('close', 26);
       kick.title = `Espelli ${pl.name}`;
       kick.onclick = () => socket.emit('kick_player', { target: pl.socketId });
       li.appendChild(kick);
@@ -418,14 +418,14 @@ function render() {
   // --- HUD (icone SVG, zero emoji) ---
   document.getElementById('roundInfo').textContent = `Round ${state.game.round}`;
   // .hud-chip e' flex con gap: il testo va subito dopo l'SVG (niente spazi liberi)
-  document.getElementById('goldInfo').innerHTML = ICONS.svg('gold-coin', 14) + `${state.self.gold} oro`;
+  document.getElementById('goldInfo').innerHTML = ICONS.svg('gold-coin', 26) + `${state.self.gold} oro`;
   const turnEl = document.getElementById('turnInfo');
   if (state.self.is_current) {
-    turnEl.innerHTML = ICONS.svg('turn-active', 15) + 'Il tuo turno';
+    turnEl.innerHTML = ICONS.svg('turn-active', 26) + 'Il tuo turno';
     turnEl.classList.add('you');
   } else {
     const cur = state.players.find(p => p.id === state.game.current_player_id);
-    turnEl.innerHTML = ICONS.svg('hourglass', 14) + `In attesa di ${cur ? esc(cur.name) : '…'}…`;
+    turnEl.innerHTML = ICONS.svg('hourglass', 26) + `In attesa di ${cur ? esc(cur.name) : '…'}…`;
     turnEl.classList.remove('you');
   }
 
@@ -438,7 +438,7 @@ function render() {
 
   // --- TP (punti tecnologia) + pannello tecnologie sempre aggiornato ---
   const tpEl = document.getElementById('tpInfo');
-  if (tpEl) tpEl.innerHTML = ICONS.svg('flask-tp', 15) + `${state.self.tp} TP`;
+  if (tpEl) tpEl.innerHTML = ICONS.svg('flask-tp', 26) + `${state.self.tp} TP`;
   document.getElementById('techTpLabel').textContent = `${state.self.tp} TP disponibili`;
   renderTechPanel();
 
@@ -453,8 +453,8 @@ function render() {
     const winner = state.players.find(p => p.id === state.game.winner_id);
     // #winnerText e' flex con gap: niente spazi liberi dopo l'SVG
     document.getElementById('winnerText').innerHTML = winner
-      ? ICONS.svg('trophy', 22) + `${esc(winner.name)} vince la partita!`
-      : ICONS.svg('handshake', 22) + 'Patta!';
+      ? ICONS.svg('trophy', 26) + `${esc(winner.name)} vince la partita!`
+      : ICONS.svg('handshake', 26) + 'Patta!';
     document.getElementById('overlay').classList.remove('hidden');
   } else {
     document.getElementById('overlay').classList.add('hidden');
@@ -479,7 +479,7 @@ function renderAdminPanel() {
     const kick = document.createElement('button');
     kick.className = 'kickBtn';
     // il bottone e' flex con gap: niente spazio libero tra testo e SVG
-    kick.innerHTML = 'Espelli' + ICONS.svg('close', 13);
+    kick.innerHTML = 'Espelli' + ICONS.svg('close', 26);
     kick.onclick = () => {
       if (confirm(`Espellere ${p.name} dalla partita?`)) socket.emit('kick_player', { target: p.id });
     };
@@ -502,7 +502,7 @@ function renderTechPanel() {
     const li = document.createElement('li');
     if (owned.includes(tech.id)) {
       // .tech-owned e' flex con gap: niente spazio libero tra SVG e nome
-      li.innerHTML = `<span class="tech-owned">${ICONS.svg('check-circle', 14)}${esc(tech.name)}</span><span class="tech-desc">${esc(tech.desc)}</span>`;
+      li.innerHTML = `<span class="tech-owned">${ICONS.svg('check-circle', 26)}${esc(tech.name)}</span><span class="tech-desc">${esc(tech.desc)}</span>`;
     } else {
       const label = document.createElement('span');
       label.textContent = tech.name;
@@ -1030,7 +1030,7 @@ function showInspector(x, y) {
   const el = document.getElementById('unitInfo');
   el.innerHTML = ''; // reset forzato: si ricostruisce SOLO il contenuto di questa casella
   // .insp-coord e' flex con gap: niente spazio libero tra SVG e testo
-  let html = `<div class="insp-coord">${ICONS.svg('pin', 13)}Casella ${tileCoord(x, y)}</div>`;
+  let html = `<div class="insp-coord">${ICONS.svg('pin', 26)}Casella ${tileCoord(x, y)}</div>`;
   const u = unitAt(x, y);
   if (u) {
     const s = state.unitTypes[u.type];
@@ -1039,23 +1039,23 @@ function showInspector(x, y) {
     // per le proprie unità mostro anche i bonus delle tecnologie acquisite
     const mods = (mine && state.self.mods) ? state.self.mods : { atk: 0, def: 0, mov: 0, vision: 0 };
     const traits = [];
-    if ((s.traits || []).includes('swim')) traits.push(ICONS.svg('trait-swim', 13) + ' nuoto');
-    if ((s.traits || []).includes('mountain')) traits.push(ICONS.svg('trait-mountain', 13) + ' montagna');
-    if ((s.traits || []).includes('strike')) traits.push(ICONS.svg('strike', 13) + ' muovi+attacca');
+    if ((s.traits || []).includes('swim')) traits.push(ICONS.svg('trait-swim', 26) + ' nuoto');
+    if ((s.traits || []).includes('mountain')) traits.push(ICONS.svg('trait-mountain', 26) + ' montagna');
+    if ((s.traits || []).includes('strike')) traits.push(ICONS.svg('strike', 26) + ' muovi+attacca');
     const modNote = (mods.atk || mods.def || mods.mov || mods.vision)
       ? ` <span class="insp-title">(incluse tech: +${[mods.atk && `${mods.atk} ATK`, mods.def && `${mods.def} DEF`, mods.mov && `${mods.mov} MOV`, mods.vision && `${mods.vision} VIS`].filter(Boolean).join(', ')})</span>` : '';
     html += `<div class="insp-section"><span class="insp-title">Unità ${mine ? '(tua)' : '— nemica'}</span><br>` +
       `<b style="color:${owner ? owner.color : '#fff'}">${s ? esc(s.name) : u.type}</b> di ${owner ? esc(owner.name) : '?'}<br>` +
       // .stat e' flex con gap: niente spazi liberi tra SVG e valore
       `<span class="stat-line">` +
-      `<span class="stat">${ICONS.svg('atk-sword', 13)}ATK ${s.atk + mods.atk}</span>` +
-      `<span class="stat">${ICONS.svg('class-shield', 13)}DEF ${s.def + mods.def}</span>` +
+      `<span class="stat">${ICONS.svg('atk-sword', 26)}ATK ${s.atk + mods.atk}</span>` +
+      `<span class="stat">${ICONS.svg('class-shield', 26)}DEF ${s.def + mods.def}</span>` +
       `</span><br>` +
       `<span class="stat-line">` +
-      `<span class="stat">${ICONS.svg('hp-heart', 13)}HP ${u.hp}/${s.hp}</span>` +
-      `<span class="stat">${ICONS.svg('move-boot', 13)}MOV ${s.mov + mods.mov}</span>` +
-      `<span class="stat">${ICONS.svg('range-target', 13)}RNG ${s.rng}</span>` +
-      `<span class="stat">${ICONS.svg('vision-eye', 13)}VISIONE ${s.vision + mods.vision}</span>` +
+      `<span class="stat">${ICONS.svg('hp-heart', 26)}HP ${u.hp}/${s.hp}</span>` +
+      `<span class="stat">${ICONS.svg('move-boot', 26)}MOV ${s.mov + mods.mov}</span>` +
+      `<span class="stat">${ICONS.svg('range-target', 26)}RNG ${s.rng}</span>` +
+      `<span class="stat">${ICONS.svg('vision-eye', 26)}VISIONE ${s.vision + mods.vision}</span>` +
       `</span>${modNote}` +
       (traits.length ? `<br>Abilità: ${traits.join(' · ')}` : '') + `</div>`;
   }
@@ -1067,12 +1067,12 @@ function showInspector(x, y) {
   const c = cityAt(x, y);
   if (c) {
     const owner = state.players.find(p => p.id === c.owner_id);
-    html += `<div class="insp-section"><span class="insp-title">Struttura</span><br>${ICONS.svg('building-city', 14)} ${esc(c.name)} — di ${owner ? esc(owner.name) : 'nessuno'} (+${CITY_INCOME_CLIENT} oro/round)</div>`;
+    html += `<div class="insp-section"><span class="insp-title">Struttura</span><br>${ICONS.svg('building-city', 26)} ${esc(c.name)} — di ${owner ? esc(owner.name) : 'nessuno'} (+${CITY_INCOME_CLIENT} oro/round)</div>`;
   } else {
     const v = villageAt(x, y);
     if (v) {
       const owner = state.players.find(p => p.id === v.owner_id);
-      html += `<div class="insp-section"><span class="insp-title">Struttura</span><br>${ICONS.svg('building-village', 14)} ${esc(v.name)} — di ${owner ? esc(owner.name) : 'nessuno (neutro)'} (+${VILLAGE_INCOME_CLIENT} oro/round, punto addestramento)</div>`;
+      html += `<div class="insp-section"><span class="insp-title">Struttura</span><br>${ICONS.svg('building-village', 26)} ${esc(v.name)} — di ${owner ? esc(owner.name) : 'nessuno (neutro)'} (+${VILLAGE_INCOME_CLIENT} oro/round, punto addestramento)</div>`;
     }
   }
   el.innerHTML = html || "Nessuna informazione su questa casella.";
@@ -1113,12 +1113,12 @@ function renderBuyPanel() {
   const occupied = pointTileOccupied();
   panel.innerHTML = `<b>Addestra unità — ${esc(buyPoint.name)}</b>` +
     // .insp-enemy e' flex con gap: niente spazio libero tra SVG e testo
-    (occupied ? `<br><span class="insp-enemy">${ICONS.svg('warning', 13)}Casella occupata: sposta l'unità per addestrare qui.</span>` : '');
+    (occupied ? `<br><span class="insp-enemy">${ICONS.svg('warning', 26)}Casella occupata: sposta l'unità per addestrare qui.</span>` : '');
   for (const [key, s] of Object.entries(state.catalog)) {
     const btn = document.createElement('button');
     btn.className = 'buyBtn';
     // il bottone e' flex con gap: niente spazio libero tra costo e SVG
-    btn.innerHTML = `${esc(s.name)} — ${s.cost}${ICONS.svg('gold-coin', 13)}`;
+    btn.innerHTML = `${esc(s.name)} — ${s.cost}${ICONS.svg('gold-coin', 26)}`;
     btn.disabled = occupied || state.self.gold < s.cost || !state.self.can_act;
     btn.onclick = () => socket.emit('buy_unit', { pointId: buyPoint.id, type: key });
     panel.appendChild(btn);
@@ -1153,7 +1153,7 @@ function addLog(msg, iconName = null) {
   if (!iconName && /^🛡️\s*/.test(text)) { iconName = 'shield-admin'; text = text.replace(/^🛡️\s*/, ''); }
   else if (!iconName && /^⚠️\s*/.test(text)) { iconName = 'warning'; text = text.replace(/^⚠️\s*/, ''); }
   // #log li e' flex con gap: niente spazio libero tra SVG e testo
-  li.innerHTML = (iconName ? ICONS.svg(iconName, 13) : '') + esc(text);
+  li.innerHTML = (iconName ? ICONS.svg(iconName, 26) : '') + esc(text);
   const logEl = document.getElementById('log');
   logEl.prepend(li);
   while (logEl.children.length > 12) logEl.lastChild.remove();
@@ -1187,9 +1187,9 @@ const GUIDE_TABS = [
   { id: 'techs',    label: 'Albero Tecnologie' },
 ];
 const TRAIT_LABELS = {
-  swim: ICONS.svg('trait-swim', 13) + " nuoto (cammina sull'acqua)",
-  mountain: ICONS.svg('trait-mountain', 13) + ' montagna (scavalca le montagne)',
-  strike: ICONS.svg('strike', 13) + ' muovi+attacca (due azioni nello stesso round)',
+  swim: ICONS.svg('trait-swim', 26) + " nuoto (cammina sull'acqua)",
+  mountain: ICONS.svg('trait-mountain', 26) + ' montagna (scavalca le montagne)',
+  strike: ICONS.svg('strike', 26) + ' muovi+attacca (due azioni nello stesso round)',
 };
 let guideData = null;        // payload di /guide.json
 let guideActiveTab = 'factions';
@@ -1252,7 +1252,7 @@ function showGuideTab(tabId) {
 
 function unitRowHtml(s) {
   const traits = (s.traits || []).map(t => TRAIT_LABELS[t]).filter(Boolean).join(' · ');
-  return `<tr><td>${esc(s.name)}</td><td>${s.cost} ${ICONS.svg('gold-coin', 12)}</td><td>${s.hp}</td><td>${s.atk}</td><td>${s.def}</td>` +
+  return `<tr><td>${esc(s.name)}</td><td>${s.cost} ${ICONS.svg('gold-coin', 26)}</td><td>${s.hp}</td><td>${s.atk}</td><td>${s.def}</td>` +
          `<td>${s.mov}</td><td>${s.rng}</td><td>${s.vision}</td><td>${traits || '—'}</td></tr>`;
 }
 
@@ -1273,7 +1273,7 @@ function buildGuideTab(tabId, content) {
     const e = guideData.economy;
     const rules = [
       ['Turni sequenziali', "I giocatori giocano uno alla volta nell'ordine di ingresso in lobby. Il turno passa solo quando il giocatore corrente conferma «Fine Turno»; nel frattempo puoi ispezionare qualsiasi casella visibile."],
-      ['Annullamento mosse (Undo)', `Durante il tuo turno ogni azione (mossa, attacco, addestramento, tecnologia) è annullabile con «${ICONS.svg('undo', 13)} Annulla Mossa» (fino a 30 per turno). Confermando la fine turno lo stack si svuota: da quel punto le mosse non sono più reversibili.`],
+      ['Annullamento mosse (Undo)', `Durante il tuo turno ogni azione (mossa, attacco, addestramento, tecnologia) è annullabile con «${ICONS.svg('undo', 26)} Annulla Mossa» (fino a 30 per turno). Confermando la fine turno lo stack si svuota: da quel punto le mosse non sono più reversibili.`],
       ['Fog of War', `Le caselle inesplorate restano nascoste. La visione guadagnata muovendo o attaccando durante il tuo turno viene rivelata SOLO quando confermi «Fine Turno». Città e villaggi hanno visione permanente di raggio ${e.visionCityRadius}.`],
       ['Villaggi e limite spawn', `I villaggi neutrali danno +${e.villageIncome} oro/round e diventano punti addestramento se conquistati. Massimo 1 unità per casella con struttura: finché la casella è occupata l'addestramento lì è disabilitato (regola validata anche dal server).`],
       ['Ricompense kill', "Distruggendo un'unità nemica ottieni oro pari a metà del suo costo di addestramento (arrotondato per eccesso) più 1 Punto Tecnologia."],
