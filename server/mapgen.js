@@ -78,6 +78,40 @@ function hasWalkableNeighbor(tiles, x, y) {
   return false;
 }
 
+// Componente di terra raggiungibile da (x0,y0): BFS su plains/forest.
+// (Le montagne sono attraversabili solo da unita' con trait 'mountain',
+// quindi per la CONNETTIVITA' delle basi contano solo pianura e foresta.)
+function landComponent(tiles, x0, y0) {
+  const size = tiles.length;
+  const seen = new Set();
+  if (tiles[y0][x0] !== BIOME.PLAINS && tiles[y0][x0] !== BIOME.FOREST) return seen;
+  const queue = [[x0, y0]];
+  seen.add(x0 + ',' + y0);
+  while (queue.length) {
+    const [cx, cy] = queue.shift();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+      const key = nx + ',' + ny;
+      if (seen.has(key)) continue;
+      if (tiles[ny][nx] !== BIOME.PLAINS && tiles[ny][nx] !== BIOME.FOREST) continue;
+      seen.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  return seen;
+}
+
+// Tutte le basi devono stare sullo stesso pezzo di terra (nessuna isola):
+// se uno spawn non e' raggiungibile a piedi dagli altri, la mappa e' scartata.
+function spawnsConnected(tiles, spawns) {
+  if (!spawns || spawns.length < 2) return true; // con 1 base non c'e' nulla da collegare
+  const comp = landComponent(tiles, spawns[0].x, spawns[0].y);
+  for (let i = 1; i < spawns.length; i++)
+    if (!comp.has(spawns[i].x + ',' + spawns[i].y)) return false;
+  return true;
+}
+
 // Punti spawn: caselle terrestri che massimizzano la distanza minima
 // reciproca (fino a `count` giocatori), mai isolate.
 function findSpawns(tiles, count) {
@@ -105,15 +139,24 @@ function findSpawns(tiles, count) {
   return spawns;
 }
 
-// Villaggi: caselle terrestri lontane dagli spawn (dist Manhattan >= 4)
-// e tra loro, scelte con massimizzazione della distanza reciproca.
+// Villaggi: caselle terrestri RAGGIUNGIBILI (stessa componente di terra di
+// almeno uno spawn), lontane dagli spawn (dist Manhattan >= 4) e tra loro,
+// scelte con massimizzazione della distanza reciproca.
 function findVillages(tiles, spawns, count) {
   const size = tiles.length;
   if (!count || count <= 0) return [];
+  // unione delle componenti di terra raggiungibili dagli spawn: i villaggi
+  // fuori da questa area sarebbero inaccessibili a piedi
+  const reachable = new Set();
+  for (const s of spawns || []) {
+    if (tiles[s.y][s.x] !== BIOME.PLAINS && tiles[s.y][s.x] !== BIOME.FOREST) continue;
+    for (const key of landComponent(tiles, s.x, s.y)) reachable.add(key);
+  }
   const candidates = [];
   for (let y = 0; y < size; y++)
     for (let x = 0; x < size; x++) {
       if (tiles[y][x] !== BIOME.PLAINS && tiles[y][x] !== BIOME.FOREST) continue;
+      if (!reachable.has(x + ',' + y)) continue; // isola inaccessibile: scartata
       const nearSpawn = spawns.some(s => Math.abs(s.x - x) + Math.abs(s.y - y) < 4);
       if (!nearSpawn) candidates.push({ x, y });
     }
@@ -135,4 +178,4 @@ function findVillages(tiles, spawns, count) {
   return out;
 }
 
-module.exports = { generateMap, findSpawns, findVillages, BIOME };
+module.exports = { generateMap, findSpawns, findVillages, landComponent, spawnsConnected, BIOME };

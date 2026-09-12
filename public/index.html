@@ -4,16 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>4X Lite — LAN</title>
-  <link rel="stylesheet" href="style.css" />
+  <!-- ?v=N: cache-busting — a ogni modifica degli asset il browser scarica la versione nuova -->
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
 
   <!-- ============ LOBBY ============ -->
   <div id="lobby">
-    <h1>⚔️ 4X Lite (LAN)</h1>
+    <h1><span data-icon="logo-swords" data-size="26"></span>4X Lite (LAN)</h1>
     <p class="sub">eXplore · eXpand · eXploit · eXterminate</p>
     <!-- Stato connessione al server: visibile se il socket non è connesso -->
-    <div id="connStatus" class="hidden">⚠️ Disconnesso dal server — ricarica la pagina o riavvia il server.</div>
+    <div id="connStatus" class="hidden"><span data-icon="warning" data-size="15"></span>Disconnesso dal server — ricarica la pagina o riavvia il server.</div>
     <input id="nameInput" placeholder="Il tuo nome" maxlength="12" />
     <button id="joinBtn">Unisciti alla partita</button>
 
@@ -28,7 +29,7 @@
 
     <!-- Configurazione generazione mondo (visibile solo all'host) -->
     <div id="configPanel" class="hidden">
-      <h3>⚙️ Generazione mondo (Host)</h3>
+      <h3><span data-icon="gear" data-size="14"></span>Generazione mondo (Host)</h3>
       <label>Dimensione mappa:
         <select id="mapSizeSel">
           <option value="12">12 × 12</option>
@@ -43,7 +44,7 @@
       <label>Villaggi: <input type="range" id="villageRange" min="0" max="12" step="1" value="4"><span class="rangeVal" id="villageVal"></span></label>
     </div>
 
-    <button id="startBtn" style="display:none">🚀 Avvia Partita (Host)</button>
+    <button id="startBtn" style="display:none"><span data-icon="rocket" data-size="16"></span>Avvia Partita (Host)</button>
     <!-- Errori della lobby visibili (prima andavano nel log nascosto del gioco) -->
     <p id="lobbyError" class="lobby-error"></p>
   </div>
@@ -51,19 +52,27 @@
   <!-- ============ GIOCO ============ -->
   <div id="game" class="hidden">
     <div id="topbar">
-      <h1>⚔️ 4X Lite</h1>
+      <h1><span data-icon="logo-swords" data-size="20"></span>4X Lite</h1>
       <span id="roundInfo" class="hud-chip"></span>
       <span id="goldInfo" class="hud-chip"></span>
+      <span id="tpInfo" class="hud-chip" title="Punti Tecnologia: +1 a ogni round e per ogni unità nemica eliminata"><span data-icon="flask-tp" data-size="15"></span>0 TP</span>
       <span id="turnInfo" class="hud-chip"></span>
-      <button id="undoBtn" disabled title="Annulla l'ultima mossa del tuo turno">↩️ Annulla Mossa</button>
-      <button id="endTurnBtn">Fine Turno ⏭</button>
-      <button id="adminBtn" class="hidden admin-btn">🛡️ Admin (Host)</button>
+      <button id="undoBtn" disabled title="Annulla l'ultima mossa del tuo turno"><span data-icon="undo" data-size="15"></span>Annulla Mossa</button>
+      <button id="endTurnBtn">Fine Turno <span data-icon="skip-forward" data-size="15"></span></button>
+      <button id="techBtn" class="admin-btn" title="Albero tecnologie della tua fazione"><span data-icon="flask-tp" data-size="15"></span>Tecnologie</button>
+      <button id="adminBtn" class="hidden admin-btn"><span data-icon="shield-admin" data-size="15"></span>Admin (Host)</button>
     </div>
 
     <!-- Menù admin riservato all'host: espelli giocatori dalla partita -->
     <div id="adminPanel" class="hidden">
       <b>Admin — espelli un giocatore</b>
       <ul id="adminList"></ul>
+    </div>
+
+    <!-- Albero tecnologie della propria fazione (perk globali, consumano TP) -->
+    <div id="techPanel" class="hidden">
+      <b>Tecnologie — <span id="techTpLabel"></span></b>
+      <ul id="techList"></ul>
     </div>
 
     <div id="mainRow">
@@ -81,12 +90,27 @@
     <div id="overlay" class="hidden">
       <div id="overlayBox">
         <h2 id="winnerText"></h2>
-        <button id="newGameBtn">🔄 Nuova Partita</button>
+        <button id="newGameBtn"><span data-icon="restart" data-size="16"></span>Nuova Partita</button>
       </div>
     </div>
   </div>
 
+  <!-- ============ GUIDA / ENCICLOPEDIA (overlay globale, sempre accessibile) ============ -->
+  <button id="guideBtn" title="Guida di gioco (enciclopedia)" data-icon="help" data-size="22" class="icon-only"></button>
+  <div id="guideModal" class="hidden">
+    <div id="guideBox">
+      <div id="guideHeader">
+        <h2><span data-icon="book" data-size="18"></span>Guida di Gioco</h2>
+        <input id="guideSearch" placeholder="Cerca unità, abilità, regole…" />
+        <button id="guideCloseBtn" title="Chiudi guida (Esc)" data-icon="close" data-size="15" class="icon-only"></button>
+      </div>
+      <div id="guideTabs"></div>
+      <div id="guideContent"></div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js"></script>
+  <script src="assets.js?v=3"></script>
+  <script src="client.js?v=3"></script>
 </body>
 </html>

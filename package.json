@@ -5,7 +5,9 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "smoke": "node test/smoke.js"
+    "logic-test": "node test/logic-test.js",
+    "smoke": "node test/smoke.js",
+    "test": "npm run logic-test && npm run smoke"
   },
   "dependencies": {
     "express": "^4.19.2",

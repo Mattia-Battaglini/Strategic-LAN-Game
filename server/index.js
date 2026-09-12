@@ -22,6 +22,27 @@ const MAP_SIZES = [12, 16, 20, 24]; // dimensioni mappa selezionabili pre-partit
 
 const app = express();
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// ---------- GUIDA / ENCICLOPEDIA: dati statici per la wiki in gioco ----------
+// Fonte di verita' unica = FACTIONS/TECHS/economia di gameLogic (niente
+// duplicazione lato client): il client li scarica da qui al primo apertura.
+app.get('/guide.json', (req, res) => {
+  const factions = {};
+  for (const [id, f] of Object.entries(G.FACTIONS))
+    factions[id] = { name: f.name, color: f.color, desc: f.desc, startUnit: f.startUnit, units: f.units };
+  res.json({
+    factions,
+    techs: G.TECHS,
+    terrain: {
+      plains:   { name: 'Pianura', fx: 'Terreno neutro: nessun bonus né malus.' },
+      forest:   { name: 'Foresta', fx: '+1 DEF al difensore; gli attacchi a distanza (RNG > 1) fanno metà danno.' },
+      mountain: { name: 'Montagna', fx: '+2 DEF al difensore che vi sta sopra; attraversabile solo da unità con trait montagna.' },
+      water:    { name: 'Acqua', fx: 'Inattraversabile, salvo unità con trait nuoto.' },
+    },
+    economy: { baseIncome: G.BASE_INCOME, cityIncome: G.CITY_INCOME, villageIncome: G.VILLAGE_INCOME, startGold: 40, visionCityRadius: 3, tpPerRound: 1 },
+  });
+});
+
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -120,8 +141,9 @@ io.on('connection', (socket) => {
     };
     const villages = Math.max(0, Math.min(12, Number.isFinite(+cfg.villages) ? +cfg.villages : 4));
 
-    // Generazione mappa: con densità estreme gli spawn potrebbero non bastare;
-    // si riprova fino a 25 volte con seed diversi prima di arrendersi.
+    // Generazione mappa: con densità estreme gli spawn potrebbero non bastare
+    // oppure le basi finirebbero su isole separate; si riprova fino a 25 volte
+    // con seed diversi prima di arrendersi.
     const baseSeed = Date.now() % 1000000;
     let g = null, seed = baseSeed;
     for (let attempt = 0; attempt < 25 && !g; attempt++) {
@@ -129,7 +151,7 @@ io.on('connection', (socket) => {
       seed = (baseSeed + attempt * 7919) >>> 0;
       G.createGame(db, mapSize, seed, { density, villages });
       g = db.Game.all()[0];
-      if (g.spawn_points.length < players.length) g = null; // mappa non giocabile: riprova
+      if (g.spawn_points.length < players.length || !G.mapIsPlayable(db)) g = null; // mappa non giocabile: riprova
     }
     if (!g) return socket.emit('error_msg', 'Mappa non giocabile con questa densità: riduci acqua/montagne o cambia dimensione.');
 
@@ -179,6 +201,15 @@ io.on('connection', (socket) => {
     const player = myPlayer(socket);
     if (!player) return;
     const res = G.performBuyUnit(db, player, pointId, type);
+    if (!res.ok) return socket.emit('error_msg', res.error);
+    broadcastState();
+  });
+
+  // Acquisto tecnologia (albero tech della propria fazione, consuma TP)
+  socket.on('buy_tech', ({ techId }) => {
+    const player = myPlayer(socket);
+    if (!player) return;
+    const res = G.performBuyTech(db, player, techId);
     if (!res.ok) return socket.emit('error_msg', res.error);
     broadcastState();
   });

@@ -1,110 +1,418 @@
 /* ============================================================
-   4X Lite — tema scuro pulito, UI minimale
+   4X Lite — TACTICAL DARK GAME UI (FASE 2 del restyling)
+   ------------------------------------------------------------
+   Tema HUD scuro ispirato a Polytopia / Civ VI / RTS moderni:
+   - glassmorphism (backdrop-filter blur) su pannelli e modali
+   - bordi sottili luminosi + ombre profonde + glow luminescente
+     sugli stati :hover/:active dei controlli
+   - palette "steel & accent" con variabili CSS centralizzate
+   Copre TUTTE le classi della checklist ASSET_AUDIT.md §4.
    ============================================================ */
+
+/* ---------- TOKEN DI TEMA ---------- */
+:root {
+  --bg-0: #0a0d13;
+  --bg-1: #0e1219;
+  --panel: rgba(18, 24, 35, .78);          /* vetro scuro dei pannelli */
+  --panel-solid: #141a26;
+  --inset: rgba(10, 13, 20, .6);           /* incavi (input, log) */
+  --border: rgba(125, 165, 235, .16);      /* bordo sottile freddo */
+  --border-strong: rgba(125, 165, 235, .34);
+  --text: #e9edf5;
+  --muted: #93a0b4;
+  --accent: #4da3ff;                        /* blu tattico */
+  --accent-glow: rgba(77, 163, 255, .4);
+  --gold: #ffd76a;
+  --green: #5ad473;
+  --red: #ff6b5c;
+  --violet: #8f7bff;                        /* pannelli tech/admin */
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body { height: 100%; }
+
 body {
-  background: #14171d; color: #e8eaed;
+  color: var(--text);
   font-family: 'Segoe UI', system-ui, sans-serif;
-  min-height: 100vh; display: flex; justify-content: center;
+  min-height: 100vh;
+  display: flex; justify-content: center;
+  background:
+    radial-gradient(1100px 560px at 72% -10%, rgba(77, 163, 255, .10), transparent 60%),
+    radial-gradient(900px 520px at 8% 112%, rgba(24, 191, 160, .07), transparent 60%),
+    linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
 }
+
+/* texture tattica: micro-griglia a bassa opacità sopra lo sfondo */
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(125, 165, 235, .028) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(90deg, rgba(125, 165, 235, .028) 0 1px, transparent 1px 44px);
+}
+
+#lobby, #game { position: relative; z-index: 1; }
+
 .hidden { display: none !important; }
 
+/* UI di gioco: niente evidenziazione accidentale del testo durante il play.
+   Le sole eccezioni sono i campi di input (nome, ricerca) dove la selezione
+   e' necessaria per digitare/modificare. */
+body, canvas#board { user-select: none; -webkit-user-select: none; }
+input, textarea, select { user-select: text; -webkit-user-select: text; }
+
+/* icone SVG inline: allineamento ottico con il testo.
+   middle = centro dell'icona all'altezza del mezzo x-height (standard per
+   icone in flusso di testo); nei contenitori flex la centratura e' data da
+   align-items:center e vertical-align non ha effetto. */
+svg.ic { vertical-align: middle; flex: none; pointer-events: none; }
+
+/* i wrapper <span data-icon> (idratazione statica) diventano mini-contenitori
+   centranti: senza questa regola l'SVG dentro lo span resta allineato alla
+   baseline e risulta spostato in basso rispetto al centro del contenitore. */
+span[data-icon] { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+
+/* ---------- SCROLLBAR TATTICHE ---------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: rgba(10, 13, 20, .5); }
+::-webkit-scrollbar-thumb {
+  background: #2a3547; border-radius: 6px; border: 2px solid rgba(10, 13, 20, .8);
+}
+::-webkit-scrollbar-thumb:hover { background: #3b4c66; }
+
+/* ============================================================
+   PULSANTI — frame + stati hover/active/disabled (audit §4)
+   ============================================================ */
 button {
-  cursor: pointer; border: none; border-radius: 8px;
-  padding: 9px 16px; font-size: 14px; font-weight: 600;
-  background: #3d7eff; color: #fff; transition: background .15s;
+  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 14px; font-weight: 600; letter-spacing: .02em;
+  color: #fff;
+  background: linear-gradient(180deg, #2a3547 0%, #1f2836 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 2px 8px rgba(0, 0, 0, .4);
+  transition: border-color .15s, box-shadow .15s, background .15s, transform .06s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
 }
-button:hover { background: #2f6ae0; }
-button:disabled { opacity: .45; cursor: not-allowed; }
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, #34425c 0%, #263349 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 0 14px var(--accent-glow);
+}
+button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, .45);
+}
+button:disabled { opacity: .38; cursor: not-allowed; filter: saturate(.4); }
 
-/* Stato "Annulla Fine Turno": fine turno in sospeso, clic per revocare */
-#endTurnBtn.cancel-mode { background: #e0533d; }
-#endTurnBtn.cancel-mode:hover { background: #c74632; }
+/* Pulsanti primari (ingresso in lobby / avvio partita): gradiente accent */
+#joinBtn, #startBtn {
+  background: linear-gradient(180deg, #3f86e8 0%, #2b5fc4 100%);
+  border-color: #5aa2ff;
+}
+#joinBtn:hover:not(:disabled), #startBtn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #4f93f2 0%, #356cd4 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 0 18px var(--accent-glow);
+}
 
-/* ---------- LOBBY ---------- */
-#lobby { text-align: center; margin-top: 8vh; width: 380px; }
-#lobby h1 { font-size: 28px; margin-bottom: 4px; }
-#lobby p.sub { color: #9aa4b2; margin-bottom: 18px; font-size: 13px; letter-spacing: .05em; }
-#nameInput {
+/* Stato "Annulla Fine Turno" (riservato a un futuro flusso di revoca:
+   il bottone entra in .cancel-mode quando la conferma fine-turno è in sospeso) */
+#endTurnBtn.cancel-mode { background: linear-gradient(180deg, #e0533d 0%, #b23c2a 100%); border-color: #ff7a63; }
+#endTurnBtn.cancel-mode:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 0 14px rgba(255, 107, 92, .45); }
+
+/* ============================================================
+   LOBBY / LAN (audit §4 — schermata lobby)
+   ============================================================ */
+#lobby { text-align: center; margin-top: 8vh; width: 380px; padding: 0 10px; }
+
+#lobby h1 {
+  font-size: 28px; letter-spacing: .04em; margin-bottom: 4px;
+  display: inline-flex; align-items: center; gap: 10px;
+  text-shadow: 0 0 22px rgba(77, 163, 255, .35);
+}
+#lobby h1 svg.ic { color: var(--accent); filter: drop-shadow(0 0 8px var(--accent-glow)); }
+
+#lobby p.sub { color: var(--muted); margin-bottom: 18px; font-size: 13px; letter-spacing: .06em; }
+
+/* input nome + select fazione: incavi in vetro */
+#nameInput, #factionSelect {
   width: 100%; padding: 10px 12px; border-radius: 8px;
-  border: 1px solid #3a4150; background: #1d222b; color: #fff;
-  font-size: 15px; margin-bottom: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--inset); color: #fff;
+  font-size: 15px; margin-bottom: 10px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
 }
-#factionBox { margin-top: 6px; }
-#factionSelect {
-  width: 100%; padding: 9px 12px; border-radius: 8px;
-  border: 1px solid #3a4150; background: #1d222b; color: #fff;
-  font-size: 14px; margin-bottom: 6px; cursor: pointer;
+#nameInput:focus, #factionSelect:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(77, 163, 255, .18), 0 0 14px var(--accent-glow);
 }
-#factionDesc { min-height: 18px; }
-#lobbyList { list-style: none; margin: 18px 0; min-height: 26px; }
-#lobbyList li {
-  padding: 6px 12px; margin: 4px 3px; display: inline-flex; align-items: center; gap: 6px;
-  background: #1d222b; border-radius: 6px; font-size: 13px;
-}
-.faction-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+#factionSelect { font-size: 14px; cursor: pointer; margin-bottom: 6px; }
 
-/* Pannello configurazione generazione mondo (solo host) */
-#configPanel {
-  text-align: left; background: #1d222b; border-radius: 10px;
-  padding: 14px 16px; margin: 14px 0; font-size: 13px;
+#factionBox { margin-top: 6px; text-align: left; }
+#factionDesc { min-height: 18px; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+
+/* lista giocatori lobby */
+#lobbyList { list-style: none; margin: 18px 0; min-height: 26px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+#lobbyList li {
+  padding: 6px 10px; display: inline-flex; align-items: center; gap: 7px;
+  background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border); border-radius: 8px; font-size: 13px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04), 0 3px 10px rgba(0, 0, 0, .3);
 }
-#configPanel h3 { color: #9aa4b2; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; margin-bottom: 10px; }
+#lobbyList li svg.ic { color: var(--gold); }
+
+/* badge fazione: cerchio neutro (nessuna fazione) oppure emblema SVG iniettato */
+.faction-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+
+/* pannello configurazione generazione mondo (solo host) */
+#configPanel {
+  text-align: left; margin: 14px 0; font-size: 13px;
+  background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 8px 24px rgba(0, 0, 0, .35);
+}
+#configPanel h3 {
+  color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .1em; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 7px;
+}
+#configPanel h3 svg.ic { color: var(--accent); }
 #configPanel label { display: flex; align-items: center; gap: 8px; margin: 7px 0; color: #c6ccd6; }
 #configPanel select {
-  padding: 5px 8px; border-radius: 6px; border: 1px solid #3a4150;
-  background: #242b37; color: #fff; font-size: 13px; margin-left: auto;
+  padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-strong);
+  background: var(--inset); color: #fff; font-size: 13px; margin-left: auto; cursor: pointer; outline: none;
 }
-#configPanel input[type=range] { flex: 1; accent-color: #3d7eff; }
-.rangeVal { min-width: 38px; text-align: right; color: #9aa4b2; font-variant-numeric: tabular-nums; }
+#configPanel select:focus { border-color: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+#configPanel input[type=range] { flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer; }
+.rangeVal { min-width: 38px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-/* Pulsante espelli (admin) */
+/* pulsante espelli (lobby + admin) */
 .kickBtn {
-  padding: 1px 7px; font-size: 12px; border-radius: 5px;
-  background: #e0533d; color: #fff; line-height: 1.4;
+  padding: 2px 7px; font-size: 12px; border-radius: 6px; line-height: 1.4;
+  background: linear-gradient(180deg, #e0533d 0%, #b23c2a 100%);
+  border-color: rgba(255, 122, 99, .5);
 }
-.kickBtn:hover { background: #c74632; }
+.kickBtn:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 0 12px rgba(255, 107, 92, .4); }
 
-/* ---------- GIOCO ---------- */
+/* ============================================================
+   GIOCO — LAYOUT + TOPBAR HUD (audit §4)
+   ============================================================ */
 #game { width: 100%; max-width: 980px; padding: 14px; }
+
 #topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-#topbar h1 { font-size: 20px; margin-right: auto; }
-.hud-chip { background: #1d222b; padding: 6px 12px; border-radius: 8px; font-size: 14px; }
-#turnInfo.you { color: #7ee787; font-weight: 700; }
-
-/* Menù admin host (in partita) */
-.admin-btn { background: #6c5ce7; }
-.admin-btn:hover { background: #5a4bd1; }
-#adminPanel {
-  background: #241f33; border: 1px solid #4a3f6b; border-radius: 8px;
-  padding: 10px 14px; margin-bottom: 12px; font-size: 13px;
+#topbar h1 {
+  font-size: 20px; margin-right: auto; letter-spacing: .04em;
+  display: inline-flex; align-items: center; gap: 8px;
 }
-#adminList { list-style: none; margin-top: 8px; }
-#adminList li { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+#topbar h1 svg.ic { color: var(--accent); filter: drop-shadow(0 0 7px var(--accent-glow)); }
 
+/* chip HUD in vetro (round / oro / TP / turno) */
+.hud-chip {
+  background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border); border-radius: 9px; padding: 6px 12px; font-size: 14px;
+  display: inline-flex; align-items: center; gap: 7px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 3px 10px rgba(0, 0, 0, .3);
+}
+.hud-chip svg.ic { color: var(--gold); }
+#tpInfo svg.ic { color: #b9a7ff; }
+
+/* chip turno: stato "il tuo turno" con glow verde pulsante */
+@keyframes turnPulse {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 0 8px rgba(90, 212, 115, .25); }
+  50%      { box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 0 18px rgba(90, 212, 115, .55); }
+}
+#turnInfo.you { color: var(--green); font-weight: 700; border-color: rgba(90, 212, 115, .45); animation: turnPulse 2.2s ease-in-out infinite; }
+#turnInfo.you svg.ic { color: var(--green); filter: drop-shadow(0 0 6px rgba(90, 212, 115, .7)); }
+
+/* bottone tecnologie (viola) */
+.admin-btn { background: linear-gradient(180deg, #4d3f9e 0%, #3a2f7d 100%); border-color: rgba(143, 123, 255, .5); }
+.admin-btn:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 14px rgba(143, 123, 255, .4); }
+#adminBtn svg.ic { color: #cfc6ff; }
+
+/* ============================================================
+   PANNELLI ADMIN + TECNOLOGIE (audit §4)
+   ============================================================ */
+#adminPanel, #techPanel {
+  background: rgba(38, 32, 64, .55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(143, 123, 255, .3); border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 12px; font-size: 13px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 8px 22px rgba(0, 0, 0, .35);
+}
+#adminPanel b, #techPanel b { color: #cfc6ff; letter-spacing: .04em; }
+#adminList, #techList { list-style: none; margin-top: 8px; }
+#adminList li, #techList li { display: flex; align-items: center; gap: 10px; padding: 4px 6px; border-radius: 7px; transition: background .12s; }
+#adminList li:hover, #techList li:hover { background: rgba(143, 123, 255, .08); }
+
+/* slot tecnologia posseduta: spunta verde + bordo sinistro */
+.tech-owned { color: var(--green); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.tech-owned svg.ic { filter: drop-shadow(0 0 5px rgba(90, 212, 115, .6)); }
+#techList li:has(.tech-owned) { border-left: 3px solid var(--green); padding-left: 8px; }
+.tech-desc { color: var(--muted); font-size: 12px; flex: 1; line-height: 1.45; }
+
+/* ============================================================
+   MAPPA (canvas) + PANNELLO LATERALE (audit §4)
+   ============================================================ */
 #mainRow { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
-canvas { background: #10131a; border-radius: 8px; cursor: pointer; max-width: 100%; height: auto; }
+
+/* cornice mappa: doppio bordo + alone blu tattico */
+canvas#board {
+  background: #0a0d13; border-radius: 6px; cursor: pointer; max-width: 100%; height: auto;
+  border: 1px solid var(--border-strong);
+  box-shadow:
+    0 0 0 4px rgba(13, 17, 26, .9),
+    0 0 0 5px rgba(125, 165, 235, .18),
+    0 14px 44px rgba(0, 0, 0, .55),
+    0 0 26px rgba(77, 163, 255, .10);
+}
 
 #sidePanel { width: 250px; font-size: 13px; }
-#sidePanel h3 { margin-bottom: 6px; color: #9aa4b2; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; }
-#unitInfo { background: #1d222b; border-radius: 8px; padding: 10px; min-height: 56px; line-height: 1.55; }
-.buyBtn { width: 100%; margin-top: 6px; text-align: left; font-size: 13px; padding: 8px 10px; background: #242b37; }
-.buyBtn:hover { background: #2f3949; }
+#sidePanel h3 {
+  margin-bottom: 6px; color: var(--muted); text-transform: uppercase;
+  font-size: 11px; letter-spacing: .1em;
+}
 
-#log { list-style: none; max-height: 150px; overflow-y: auto; }
-#log li { font-size: 12px; color: #8b96a5; padding: 2px 0; border-bottom: 1px solid #232936; }
+/* scheda info casella: pannello in vetro */
+#unitInfo {
+  background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px; min-height: 56px; line-height: 1.6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04), 0 8px 22px rgba(0, 0, 0, .35);
+}
 
-/* ---------- OVERLAY GAME OVER ---------- */
-#overlay { position: fixed; inset: 0; background: rgba(10, 12, 16, .8); display: flex; align-items: center; justify-content: center; z-index: 10; }
-#overlayBox { background: #1d222b; padding: 34px 44px; border-radius: 14px; text-align: center; }
-#winnerText { margin-bottom: 18px; font-size: 24px; }
+/* chip coordinate (header inspector) */
+.insp-coord {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: linear-gradient(180deg, rgba(255, 215, 106, .14), rgba(255, 215, 106, .07));
+  border: 1px solid rgba(255, 215, 106, .4); border-radius: 7px; padding: 4px 9px;
+  margin-bottom: 8px; font-weight: 700; color: var(--gold); font-size: 12px; letter-spacing: .06em;
+  box-shadow: 0 0 10px rgba(255, 215, 106, .15);
+}
+.insp-coord svg.ic { filter: drop-shadow(0 0 4px rgba(255, 215, 106, .6)); }
 
-/* ---------- STATO CONNESSIONE + ERRORI LOBBY ---------- */
+.insp-section { margin-bottom: 8px; padding-left: 8px; border-left: 2px solid var(--border-strong); }
+.insp-title { color: var(--muted); text-transform: uppercase; font-size: 10px; letter-spacing: .09em; }
+.insp-enemy { color: #ff8a75; display: inline-flex; align-items: center; gap: 6px; }
+.insp-enemy svg.ic { color: var(--red); }
+
+/* righe stat unità: icone allineate */
+#unitInfo .stat-line { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; font-size: 12.5px; }
+#unitInfo .stat { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+#unitInfo .stat svg.ic { color: var(--muted); }
+
+/* bottoni addestramento (pannello buy) */
+.buyBtn {
+  width: 100%; margin-top: 6px; text-align: left; font-size: 13px; padding: 8px 10px;
+  background: linear-gradient(180deg, #242b37 0%, #1c222d 100%);
+}
+.buyBtn:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 0 12px var(--accent-glow); }
+
+/* log di gioco */
+#log { list-style: none; max-height: 150px; overflow-y: auto; padding-right: 4px; }
+#log li {
+  font-size: 12px; color: #8b96a5; padding: 3px 4px; border-bottom: 1px solid rgba(125, 165, 235, .08);
+  display: flex; align-items: center; gap: 6px; line-height: 1.4;
+}
+#log li svg.ic { color: var(--muted); flex: none; }
+
+/* ============================================================
+   OVERLAY GAME OVER (audit §4)
+   ============================================================ */
+#overlay {
+  position: fixed; inset: 0; z-index: 10;
+  background: rgba(8, 10, 15, .72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+}
+#overlayBox {
+  background: var(--panel); border: 1px solid var(--border-strong); border-radius: 16px;
+  padding: 34px 44px; text-align: center; max-width: min(92vw, 520px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 24px 70px rgba(0, 0, 0, .6), 0 0 40px var(--accent-glow);
+}
+#winnerText { margin-bottom: 18px; font-size: 23px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+#winnerText svg.ic { color: var(--gold); filter: drop-shadow(0 0 10px rgba(255, 215, 106, .7)); }
+
+/* ============================================================
+   STATO CONNESSIONE + ERRORI LOBBY (audit §4)
+   ============================================================ */
 #connStatus {
-  background: #3a2020; border: 1px solid #e0533d; color: #ffb4a8;
-  padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
+  background: rgba(90, 30, 24, .5); border: 1px solid var(--red); color: #ffb4a8;
+  padding: 8px 12px; border-radius: 9px; font-size: 13px; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px; justify-content: center;
+  box-shadow: 0 0 16px rgba(255, 107, 92, .2);
 }
-.lobby-error {
-  min-height: 20px; margin-top: 12px; color: #ff8a75; font-size: 13px; line-height: 1.4;
+#connStatus svg.ic { color: var(--red); }
+
+.lobby-error { min-height: 20px; margin-top: 12px; color: #ff8a75; font-size: 13px; line-height: 1.4; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.lobby-error svg.ic { color: var(--red); }
+
+/* ============================================================
+   GUIDA / ENCICLOPEDIA — modale globale non distruttiva (audit §4)
+   ============================================================ */
+#guideBtn {
+  position: fixed; right: 18px; bottom: 18px; z-index: 60;
+  width: 46px; height: 46px; border-radius: 50%; padding: 0;
+  background: linear-gradient(180deg, #3f86e8 0%, #2b5fc4 100%);
+  border-color: #5aa2ff; color: #fff; font-size: 20px; font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), 0 4px 16px rgba(0, 0, 0, .5), 0 0 18px var(--accent-glow);
 }
+#guideBtn:hover { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 4px 16px rgba(0, 0, 0, .5), 0 0 26px var(--accent-glow); }
+
+#guideModal {
+  position: fixed; inset: 0; z-index: 55;
+  background: rgba(6, 8, 12, .74); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+
+#guideBox {
+  width: min(760px, 92vw); max-height: 86vh;
+  background: var(--panel); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border-strong); border-radius: 14px;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 24px 70px rgba(0, 0, 0, .6), 0 0 34px var(--accent-glow);
+}
+
+#guideHeader { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); background: rgba(10, 13, 20, .35); }
+#guideHeader h2 { font-size: 17px; margin-right: auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 9px; letter-spacing: .03em; }
+#guideHeader h2 svg.ic { color: var(--accent); filter: drop-shadow(0 0 6px var(--accent-glow)); }
+
+#guideSearch {
+  flex: 1; max-width: 260px; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid var(--border-strong); background: var(--inset); color: #fff; font-size: 13px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+#guideSearch:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(77, 163, 255, .18), 0 0 12px var(--accent-glow); }
+
+#guideCloseBtn { background: linear-gradient(180deg, #e0533d 0%, #b23c2a 100%); border-color: rgba(255, 122, 99, .5); padding: 6px 12px; }
+#guideCloseBtn:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 0 12px rgba(255, 107, 92, .4); }
+
+/* schede tab con badge risultati ricerca */
+#guideTabs { display: flex; gap: 6px; padding: 10px 18px 0; flex-wrap: wrap; }
+.g-tab {
+  background: rgba(36, 43, 55, .7); color: #c6ccd6; font-size: 13px; padding: 7px 12px;
+  border-radius: 8px 8px 0 0; border-bottom: 2px solid transparent;
+}
+.g-tab:hover:not(.active) { color: #fff; background: rgba(46, 56, 73, .8); }
+.g-tab.active {
+  background: linear-gradient(180deg, #3f86e8 0%, #2b5fc4 100%); color: #fff; border-bottom-color: var(--gold);
+  box-shadow: 0 -2px 14px rgba(77, 163, 255, .3) inset;
+}
+.g-count { background: rgba(255, 255, 255, .28); border-radius: 10px; padding: 0 6px; font-size: 11px; margin-left: 4px; }
+
+#guideContent { padding: 14px 18px 18px; overflow-y: auto; flex: 1; }
+.g-entry {
+  background: rgba(35, 41, 54, .72); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 10px; font-size: 13px; line-height: 1.6;
+  transition: border-color .15s, box-shadow .15s;
+}
+.g-entry:hover { border-color: var(--border-strong); box-shadow: 0 4px 18px rgba(0, 0, 0, .35), 0 0 12px rgba(77, 163, 255, .12); }
+.g-faction b { font-size: 15px; letter-spacing: .03em; }
+.g-sub { color: var(--muted); font-size: 12px; }
+
+/* tabelle unità/tecnologie della guida */
+.g-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+.g-table th {
+  text-align: left; color: var(--muted); font-weight: 600; padding: 4px 6px;
+  border-bottom: 1px solid var(--border-strong); white-space: nowrap; letter-spacing: .05em; text-transform: uppercase; font-size: 10.5px;
+}
+.g-table td { padding: 5px 6px; border-bottom: 1px solid rgba(125, 165, 235, .08); white-space: nowrap; }
+.g-table tbody tr:hover { background: rgba(77, 163, 255, .06); }
+
+.g-loading { color: var(--muted); font-size: 13px; padding: 8px 0; }
