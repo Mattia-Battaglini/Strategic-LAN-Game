@@ -8,6 +8,9 @@
 //   - albero tecnologie (TP, effetti globali validati server)
 //   - trait 'strike' (muovi E attacca nello stesso round)
 //   - trait 'mountain' (scavalcare le montagne)
+//   - occupazione singola (max 1 unita' per casella: atterraggio e attraversamento bloccati)
+//   - spawn villaggio (origine = casella del villaggio, collisione PK citta'/villaggio)
+//   - azioni nemiche a rilascio ritardato (stato confermato solo al fine turno)
 // Uso: node test/logic-test.js
 // ============================================================
 
@@ -40,6 +43,22 @@ function tileId(db, x, y) { return db.Tiles.all().find(t => t.x === x && t.y ===
 function cityId(db, playerId) { return db.Cities.all().find(c => c.owner_id === playerId).id; }
 function unitOf(db, playerId) { return db.Units.all().filter(u => u.owner_id === playerId); }
 
+// (setup di test) rende visibili a un player le caselle in cerchio attorno a (x,y):
+// serve per isolare la verifica dello stato confermato dalla nebbia di guerra.
+function revealFor(db, playerId, x, y, r) {
+  const size = db.Game.all()[0].map_size;
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) > r) continue;
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+      const t = db.Tiles.all().find(t => t.x === nx && t.y === ny);
+      if (!t) continue;
+      const seen = db.TileVisibility.all().some(v => v.tile_id === t.id && v.player_id === playerId);
+      if (!seen) db.TileVisibility.insert({ tile_id: t.id, player_id: playerId });
+    }
+}
+
 // Sposta l'unita' di partenza su una casella raggiungibile (libera la citta').
 function freeCity(db, player) {
   const u = unitOf(db, player.id)[0];
@@ -53,7 +72,7 @@ function freeCity(db, player) {
 // Addestra un tipo in citta' e lo rende subito pronto (bypass del "pronto dal round dopo").
 function trainReady(db, player, type) {
   freeCity(db, player);
-  const r = G.performBuyUnit(db, player, cityId(db, player.id), type);
+  const r = G.performBuyUnit(db, player, cityId(db, player.id), type, 'city');
   if (!r.ok) throw new Error('setup: ' + r.error);
   const u = db.Units.all().find(u => u.type === type && u.owner_id === player.id);
   db.Units.update(u.id, { has_moved: false });
@@ -117,10 +136,10 @@ console.log('--- LIMITE SPAWN (max 1 unita\' per struttura) ---');
 {
   const db = makeWorld();
   const [a] = addTwo(db);
-  const r = G.performBuyUnit(db, a, cityId(db, a.id), 'valoria_warrior');
+  const r = G.performBuyUnit(db, a, cityId(db, a.id), 'valoria_warrior', 'city');
   check(!r.ok && /occupata/.test(r.error), `spawn bloccato con casella occupata: "${r.error}"`);
   freeCity(db, a); // l'unita' libera la casella
-  const r2 = G.performBuyUnit(db, a, cityId(db, a.id), 'valoria_warrior');
+  const r2 = G.performBuyUnit(db, a, cityId(db, a.id), 'valoria_warrior', 'city');
   check(r2.ok, 'spawn riabilitato dopo che l\'unita\' ha liberato la casella');
 }
 
@@ -202,6 +221,103 @@ console.log('--- TRAIT MOUNTAIN (scavalcare le montagne) ---');
   db.Tiles.update(tileId(db, mX, def.y), { biome: 'mountain' });
   const sel2 = G.selectionInfo(db, a, def.id);
   check(sel2.reachable.some(p => p.x === mX && p.y === def.y), 'Difensore (trait mountain) entra in montagna');
+}
+
+console.log('--- OCCUPAZIONE SINGOLA (max 1 unita\' per casella) ---');
+{
+  const db = makeWorld();
+  const [a] = addTwo(db);
+  const ua = unitOf(db, a.id)[0]; // Guerriero (in citta')
+  freeCity(db, a);                 // il Guerriero si sposta: la citta' e' libera
+  db.Players.update(a.id, { gold: 200 });
+  G.performBuyUnit(db, a, cityId(db, a.id), 'valoria_defender', 'city');
+  const def = db.Units.all().find(u => u.type === 'valoria_defender' && u.owner_id === a.id);
+  db.Units.update(def.id, { has_moved: false }); // pronto (bypass "pronto dal round dopo")
+
+  // 1) atterraggio sulla casella di un ALLEATO: non raggiungibile + mossa rifiutata
+  const sel = G.selectionInfo(db, a, def.id);
+  check(!sel.reachable.some(p => p.x === ua.x && p.y === ua.y), 'casella occupata da un alleato NON e\' raggiungibile');
+  const rBlock = G.performMove(db, a, def.id, ua.x, ua.y);
+  check(!rBlock.ok, `mossa su casella occupata rifiutata: "${rBlock.error}"`);
+
+  // 2) attraversamento: il Cavaliere (MOV 2) non puo' "saltare" la casella di un alleato
+  db.Units.update(def.id, { x: 0, y: 5 }); // sposto il Difensore altrove (libera la citta')
+  G.performBuyUnit(db, a, cityId(db, a.id), 'valoria_rider', 'city');
+  const rider = db.Units.all().find(u => u.type === 'valoria_rider' && u.owner_id === a.id);
+  db.Units.update(rider.id, { has_moved: false });
+  // disposizione lineare controllata: [rider (2,3)] -> [alleato ua (3,3)] -> (4,3)
+  const bobU = db.Units.all().find(u => u.owner_id !== a.id);
+  db.Units.update(bobU.id, { x: 7, y: 0 }); // Bob in un angolo: non interferisce
+  db.Units.update(ua.id, { x: 3, y: 3 });
+  db.Units.update(rider.id, { x: 2, y: 3 });
+  const selR = G.selectionInfo(db, a, rider.id);
+  check(!selR.reachable.some(p => p.x === 4 && p.y === 3), 'il percorso NON attraversa la casella di un alleato (MOV 2)');
+}
+
+console.log('--- SPAWN VILLAGGIO (origine = casella del villaggio, collisione ID) ---');
+{
+  // mondo con villaggi: i PK sono autoincrement SEPARATI per tabella e i villaggi
+  // vengono inseriti PRIMA delle citta' -> l'id del villaggio 1 coincide con la
+  // citta' di Alice (caso esatto del bug: spawn sulla base principale)
+  const db = new DB();
+  G.createGame(db, 8, 12345, { density: { water: 0, mountain: 0, forest: 0 }, villages: 2 });
+  for (const t of db.Tiles.all()) db.Tiles.update(t.id, { biome: 'plains' });
+  const a = G.addPlayer(db, 'Alice', 'valoria');
+  const b = G.addPlayer(db, 'Bob', 'nordmark');
+  G.finalizeTurnOrder(db);
+
+  const v = db.Villages.all()[0];
+  const cityA = db.Cities.all().find(c => c.owner_id === a.id);
+  check(v.id === cityA.id, `precondizione collisione ID: villaggio id=${v.id} == citta' di Alice id=${cityA.id}`);
+  const vt = db.Tiles.get(v.tile_id), ct = db.Tiles.get(cityA.tile_id);
+  check(!(vt.x === ct.x && vt.y === ct.y), 'il villaggio sta su casella diversa dalla citta\'');
+
+  db.Villages.update(v.id, { owner_id: a.id }); // conquista (setup)
+  db.Players.update(a.id, { gold: 200 });
+  const startU = unitOf(db, a.id)[0]; // Guerriero iniziale in citta'
+  const r = G.performBuyUnit(db, a, v.id, 'valoria_warrior', 'village');
+  check(r.ok, `addestramento nel villaggio riuscito (pointKind=village): ${r.error || 'ok'}`);
+  const atVillage = db.Units.all().filter(u => u.owner_id === a.id && u.x === vt.x && u.y === vt.y);
+  check(atVillage.length === 1 && atVillage[0].id !== startU.id, `unita' spawna nella casella del villaggio (${vt.x},${vt.y}), non sulla base`);
+
+  // controllo negativo: senza kind dichiarato il punto e' rifiutato (niente lookup ambiguo)
+  const rNoKind = G.performBuyUnit(db, a, v.id, 'valoria_warrior');
+  check(!rNoKind.ok && /non valido/i.test(rNoKind.error), `pointKind mancante: acquisto rifiutato ("${rNoKind.error}")`);
+}
+
+console.log('--- AZIONI NEMICHE A RILASCIO RITARDATO ---');
+{
+  const db = makeWorld();
+  const [a, b] = addTwo(db); // current = a (primo in coda)
+  const ua = unitOf(db, a.id)[0];
+  const x0 = ua.x, y0 = ua.y;
+  revealFor(db, b.id, x0, y0, 2); // (setup) Bob vede l'area di Alice: isolo la verifica dalla nebbia
+
+  const nx = x0 + (x0 < 7 ? 1 : -1);
+  G.performMove(db, a, ua.id, nx, y0); // Alice si muove (stato LIVE)
+  const snapB = G.buildSnapshotForPlayer(db, b); // Bob NON e' corrente -> stato confermato
+  const seen = snapB.units.find(u => u.id === ua.id);
+  check(!!seen && seen.x === x0 && seen.y === y0, `durante il turno di Alice, Bob vede la posizione CONFERMATA (${x0},${y0}), non quella live (${nx},${y0})`);
+
+  G.performEndTurn(db, a); // conferma: lo stato live diventa confermato
+  const snapA2 = G.buildSnapshotForPlayer(db, a); // ora tocca a Bob: Alice vede il confermato
+  const seen2 = snapA2.units.find(u => u.id === ua.id);
+  check(!!seen2 && seen2.x === nx && seen2.y === y0, `dopo la conferma di fine turno la mossa e' visibile (${nx},${y0})`);
+
+  // undo del turno corrente non tocca lo stato confermato (resta l'ultimo commit):
+  // Bob fa una mossa, poi la annulla -> Alice (non corrente) continua a vedere
+  // la posizione confermata precedente in entrambi i casi.
+  const uB = unitOf(db, b.id)[0];
+  revealFor(db, a.id, uB.x, uB.y, 2);
+  const bx0 = uB.x;
+  G.performMove(db, b, uB.id, bx0 + (bx0 < 7 ? 1 : -1), uB.y); // mossa live di Bob
+  let snapA3 = G.buildSnapshotForPlayer(db, a);
+  const seenLive = snapA3.units.find(u => u.id === uB.id);
+  check(!!seenLive && seenLive.x === bx0, 'durante il turno di Bob, Alice NON vede la sua mossa in corso');
+  G.performUndoAction(db, b); // Bob annulla: lo stato live torna indietro...
+  snapA3 = G.buildSnapshotForPlayer(db, a); // ...e quello confermato resta intatto
+  const seenUndo = snapA3.units.find(u => u.id === uB.id);
+  check(!!seenUndo && seenUndo.x === bx0, 'dopo l\'undo di Bob lo stato confermato per Alice non cambia');
 }
 
 console.log(`\nLOGIC TEST: ${passed} passed, ${failed} failed`);

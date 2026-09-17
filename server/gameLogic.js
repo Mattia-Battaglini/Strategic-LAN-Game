@@ -30,6 +30,12 @@
 //   La visione guadagnata muovendo/attaccando durante un turno NON viene
 //   rivelata subito: e' accumulata in pendingVision[playerId] e scritta
 //   nella TileVisibility SOLO quando il player conferma la fine turno.
+//
+// AZIONI A RILASCIO RITARDATO (stesso principio, per le unita'):
+//   Le mosse/attacchi in corso del giocatore corrente NON sono visibili agli
+//   altri player: gli snapshot dei non-correnti usano lo "stato confermato"
+//   (confirmedState), una copia di Units/Cities/Villages aggiornata SOLO alla
+//   conferma della fine turno. Il player corrente vede sempre lo stato live.
 // ============================================================
 
 const { generateMap, findSpawns, findVillages, spawnsConnected, BIOME } = require('./mapgen');
@@ -138,7 +144,20 @@ const UNDO_CAP = 30;           // limite mosse annullabili per turno
 // TileVisibility solo alla conferma della fine turno del player.
 let pendingVision = {};
 
+// Stato confermato (azioni a rilascio ritardato): copia profonda di
+// Units/Cities/Villages scattata a ogni fine turno confermato. I player NON
+// correnti la ricevono negli snapshot; il player corrente vede lo stato live.
+let confirmedState = null; // { Units:[...], Cities:[...], Villages:[...] }
+
 function clearUndo() { undoStack.length = 0; }
+
+function snapshotConfirmed(db) {
+  confirmedState = JSON.parse(JSON.stringify({
+    Units: db.Units.all(),
+    Cities: db.Cities.all(),
+    Villages: db.Villages.all(),
+  }));
+}
 
 function pushUndo(db) {
   const pv = {}; // i Set non sono serializzabili in JSON: li converto in array
@@ -201,6 +220,7 @@ function mapIsPlayable(db) {
 function createGame(db, mapSize, seed, opts = {}) {
   clearUndo();
   pendingVision = {};
+  confirmedState = null; // la partita riparte: lo stato confermato si ricalcola in finalizeTurnOrder
   const density = opts.density || {};
   const { tiles } = generateMap(mapSize, seed, density);
   const spawns = findSpawns(tiles, MAX_PLAYERS); // max 4 spawn
@@ -251,6 +271,7 @@ function finalizeTurnOrder(db) {
     current_player_id: ids[0] || null,
     round_start_player_id: ids[0] || null,
   });
+  snapshotConfirmed(db); // lo stato iniziale (posizioni spawn) e' gia' confermato
 }
 
 // ---------- NEBBIA DI GUERRA (eXplore) ----------
@@ -303,8 +324,9 @@ function canAct(db, player) {
 }
 
 // BFS con punti movimento: acqua inattraversabile salvo trait 'swim', montagne
-// inattraversabili salvo trait 'mountain'; i nemici bloccano il percorso, le
-// unita' amiche possono impilarsi. Il MOV include i bonus delle tecnologie.
+// inattraversabili salvo trait 'mountain'. OCCUPAZIONE SINGOLA: ogni casella
+// con un'unita' (amica o nemica) blocca atterraggio E attraversamento —
+// massimo 1 unita' per casella. Il MOV include i bonus delle tecnologie.
 function reachableTiles(db, unit) {
   const size = currentGame(db).map_size;
   const stats = UNIT_TYPES[unit.type];
@@ -326,8 +348,8 @@ function reachableTiles(db, unit) {
       if (!t || dist.has(t.id)) continue;
       if (t.biome === BIOME.MOUNTAIN && !canClimb) continue; // montagne: solo unita' con trait
       if (t.biome === BIOME.WATER && !canSwim) continue;    // acqua: solo i Nuotatori
-      const enemy = db.Units.all().find(u => u.x === nx && u.y === ny && u.owner_id !== unit.owner_id);
-      if (enemy) continue; // i nemici bloccano il passaggio
+      const occupied = db.Units.all().some(u => u.x === nx && u.y === ny);
+      if (occupied) continue; // OCCUPAZIONE SINGOLA: casella occupata (amica o nemica) = blocco totale
       dist.set(t.id, cd + 1);
       queue.push([nx, ny]);
     }
@@ -370,6 +392,12 @@ function performMove(db, player, unitId, toX, toY) {
 
   const reach = reachableTiles(db, unit).find(r => r.tile.x === toX && r.tile.y === toY);
   if (!reach) return { ok: false, error: 'Destinazione fuori portata o bloccata.' };
+
+  // OCCUPAZIONE SINGOLA (difesa in profondita'): la destinazione deve essere
+  // libera da qualsiasi unita' — il BFS gia' lo garantisce, ma il controllo
+  // esplicito rende la regola severa anche a fronte di stati anomali.
+  if (db.Units.all().some(u => u.x === toX && u.y === toY))
+    return { ok: false, error: "La casella è occupata da un'altra unità." };
 
   pushUndo(db); // la mossa sara' annullabile finche' non confermi il turno
   db.Units.update(unitId, { x: toX, y: toY, has_moved: true });
@@ -448,16 +476,23 @@ function performAttack(db, player, unitId, targetX, targetY) {
 // Addestramento in una citta' OPPURE in un villaggio conquistato (punto spawn extra).
 // LIMITE SPAWN: massimo 1 unita' per casella con struttura — se la casella e'
 // occupata da un'unita', l'addestramento e' disabilitato finche' non si libera.
-function performBuyUnit(db, player, pointId, type) {
+// ATTENZIONE AI PK: Cities e Villages hanno autoincrement SEPARATI, quindi gli ID
+// delle due tabelle POSSONO coincidere (villaggio id=1 == citta' id=1). Per questo
+// il client dichiara esplicitamente pointKind ('city'|'village') e qui si consulta
+// SOLO la tabella indicata: nessun lookup "a tentativi" che potrebbe risolvere un
+// villaggio nella citta' ome (e far spawna l'unita' sulla base principale).
+function performBuyUnit(db, player, pointId, type, pointKind) {
   if (!canAct(db, player)) return NOT_YOUR_TURN_ERR;
   const stats = UNIT_TYPES[type];
   if (!stats) return { ok: false, error: "Tipo unità sconosciuto." };
-  // il punto di addestramento puo' essere una citta' OPPURE un villaggio (id separati per tabella)
-  const city = db.Cities.get(pointId);
-  const village = db.Villages.get(pointId);
   let point = null;
-  if (city && city.owner_id === player.id) point = city;
-  else if (village && village.owner_id === player.id) point = village;
+  if (pointKind === 'city') {
+    const city = db.Cities.get(pointId);
+    if (city && city.owner_id === player.id) point = city;
+  } else if (pointKind === 'village') {
+    const village = db.Villages.get(pointId);
+    if (village && village.owner_id === player.id) point = village;
+  }
   if (!point) return { ok: false, error: 'Punto di addestramento non valido.' };
   const t = db.Tiles.get(point.tile_id);
   if (db.Units.all().some(u => u.x === t.x && u.y === t.y))
@@ -536,6 +571,9 @@ function performEndTurn(db, player) {
     committed = true;
   }
   db.Game.update(g.id, { current_player_id: nextId });
+  // Le azioni di questo turno sono ora CONFERMATE: gli altri player le vedranno
+  // nello stato confermato (rilascio ritardato delle mosse nemiche).
+  snapshotConfirmed(db);
   return { ok: true, committed };
 }
 
@@ -557,6 +595,7 @@ function removePlayerFromGame(db, playerId, reason) {
   const idx = queue.indexOf(p.id);
   if (idx !== -1) queue.splice(idx, 1);
 
+  const wasCurrent = g.current_player_id === p.id; // il turno era del player rimosso?
   let current = g.current_player_id;
   let roundStart = g.round_start_player_id;
   if (!queue.length) {
@@ -567,16 +606,30 @@ function removePlayerFromGame(db, playerId, reason) {
   }
   db.Game.update(g.id, { turn_queue: queue, current_player_id: current, round_start_player_id: roundStart });
 
+  // Se il turno e' passato SENZA conferma (espulsione/disconnessione del player
+  // corrente), lo stato finale diventa confermato subito: cosi' tutti i client
+  // vedono le stesse posizioni delle unita' (niente "mosse fantasma" nascoste).
+  if (wasCurrent) snapshotConfirmed(db);
+
   checkGameEnd(db);
   return { name: p.name, reason };
 }
 
 // ---------- SNAPSHOT CON NEBBIA DI GUERRA (anti-cheat) ----------
 // Il client riceve SOLO le caselle in TileVisibility del proprio player.
+// AZIONI A RILASCIO RITARDATO: i player NON correnti ricevono unita'/citta'/
+// villaggi dallo STATO CONFERMATO (ultimo fine turno): le azioni in corso del
+// giocatore corrente restano nascoste finche' non conferma la fine turno. Il
+// player corrente riceve lo stato live (le sue mosse le vede lui per primo).
 function buildSnapshotForPlayer(db, player, opts = {}) {
   const g = currentGame(db);
   const visible = new Set(
     db.TileVisibility.all().filter(v => v.player_id === player.id).map(v => v.tile_id));
+
+  const frozen = !!(confirmedState && g.current_player_id !== player.id);
+  const unitsAll = frozen ? confirmedState.Units : db.Units.all();
+  const citiesAll = frozen ? confirmedState.Cities : db.Cities.all();
+  const villagesAll = frozen ? confirmedState.Villages : db.Villages.all();
 
   return {
     game: { round: g.round, phase: g.phase, winner_id: g.winner_id, map_size: g.map_size, current_player_id: g.current_player_id },
@@ -592,13 +645,13 @@ function buildSnapshotForPlayer(db, player, opts = {}) {
     unitTypes: UNIT_TYPES, // stat pubbliche di TUTTE le unita' (icone/HP per il rendering + ispezione nemici)
     techCatalog: TECHS[player.faction] || [], // albero tecnologie della propria fazione
     tiles: db.Tiles.all().filter(t => visible.has(t.id)).map(t => ({ id: t.id, x: t.x, y: t.y, biome: t.biome })),
-    cities: db.Cities.all()
+    cities: citiesAll
       .filter(c => visible.has(c.tile_id))
       .map(c => ({ id: c.id, name: c.name, owner_id: c.owner_id, tile_id: c.tile_id })),
-    villages: db.Villages.all()
+    villages: villagesAll
       .filter(v => visible.has(v.tile_id))
       .map(v => ({ id: v.id, name: v.name, owner_id: v.owner_id, tile_id: v.tile_id })),
-    units: db.Units.all()
+    units: unitsAll
       .filter(u => u.owner_id === player.id || (tileAt(db, u.x, u.y) && visible.has(tileAt(db, u.x, u.y).id)))
       .map(u => ({ id: u.id, type: u.type, owner_id: u.owner_id, x: u.x, y: u.y, hp: u.hp, has_moved: u.has_moved, has_attacked: u.has_attacked })),
   };

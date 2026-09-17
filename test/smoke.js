@@ -110,6 +110,10 @@ function waitFor(sock, ev, pred, ms = 5000) {
   if (sel.reachable.length === 0) throw new Error("Nessuna casella raggiungibile dallo spawn");
 
   // --- Movimento validato lato server ---
+  // AZIONI A RILASCIO RITARDATO: registro PRIMA dell'emit il prossimo stato che
+  // riceve Bob — durante il turno di Alice deve restare IDENTICO a quello
+  // dell'avvio (le mosse live nemiche non sono visibili prima del fine turno).
+  const pBFrozen = waitFor(b, 'state_update', () => true);
   const dest = sel.reachable[0];
   a.emit('move_unit', { unitId: myUnit.id, toX: dest.x, toY: dest.y });
   stA = await waitFor(a, 'state_update', s => {
@@ -120,6 +124,11 @@ function waitFor(sock, ev, pred, ms = 5000) {
   console.log(`Warrior spostato a (${moved.x},${moved.y}), has_moved=${moved.has_moved}, undo_count=${stA.self.undo_count}`);
   if (moved.x !== dest.x || moved.y !== dest.y) throw new Error('Il movimento non e\' stato applicato');
   if (stA.self.undo_count < 1) throw new Error("Dopo una mossa lo stack undo deve essere >= 1");
+
+  const stBfrozen = await pBFrozen; // stato che Bob ha ricevuto per la mossa di Alice
+  if (JSON.stringify(stB.units) !== JSON.stringify(stBfrozen.units))
+    throw new Error('Bob vede le mosse live di Alice durante il suo turno: le azioni nemiche devono restare nascoste fino al fine turno confermato');
+  console.log('Vista congelata di Bob verificata: nessuna mossa live di Alice visibile prima del fine turno ✅');
 
   // --- UNDO: Alice annulla la mossa, la posizione torna allo spawn ---
   a.emit('undo_action');

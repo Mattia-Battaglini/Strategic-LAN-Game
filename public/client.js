@@ -14,6 +14,7 @@ let selectedUnitId = null; // unita' selezionata
 let selectedUnit = null;   // oggetto unita' selezionata
 let selection = null;      // { reachable:[{x,y}], targets:[{x,y}], stats } dal server
 let tileXY = {};           // tile_id -> tile (ricostruito a ogni state_update)
+let tileAtXY = {};         // "x,y" -> tile (per i bonus di terreno sotto le unita')
 let lobbyPlayers = [];     // ultimo payload lobby_update.players
 let iAmInLobby = false;    // il mio socket e' presente nella lista lobby
 let buyPoint = null;       // { id, name } del punto di addestramento con pannello aperto
@@ -356,6 +357,8 @@ function render() {
   const px = VIEW.px;
   tileXY = {};
   for (const t of state.tiles) tileXY[t.id] = t;
+  tileAtXY = {};
+  for (const t of state.tiles) tileAtXY[t.x + ',' + t.y] = t;
   const playerById = {};
   state.players.forEach(p => playerById[p.id] = p);
 
@@ -839,6 +842,72 @@ function drawVillage(X, Y, px, color) {
   ctx.stroke();
 }
 
+// ---------- OVERLAY BONUS (terreno + tecnologie) sopra lo sprite ----------
+// Fila di pill compattate direttamente sopra l'unita': bonus DEF del terreno per
+// TUTTE le unita' (amiche e nemiche — il biome della casella e' sempre noto: un'
+// unita' nemica arriva nello snapshot solo se la sua casella e' visibile) e
+// bonus delle tecnologie attive solo per le PROPRIE unita' (i tech nemici non
+// sono nel snapshot per design anti-cheat; il dettaglio completo resta nell'inspector).
+function unitBonusChips(u) {
+  const chips = []; // [{text, color}] in ordine di priorita': il terreno va prima e NON si scarta mai
+  const t = tileAtXY[u.x + ',' + u.y];
+  if (t && t.biome === 'mountain') chips.push({ text: '+2D', color: '#7ce07f' }); // +2 DEF montagna
+  else if (t && t.biome === 'forest') chips.push({ text: '+1D', color: '#7ce07f' }); // +1 DEF foresta
+  if (u.owner_id === myId && state.self.mods) {
+    const m = state.self.mods;
+    if (m.atk > 0) chips.push({ text: '+' + m.atk + 'A', color: '#ffd166' });
+    if (m.mov > 0) chips.push({ text: '+' + m.mov + 'M', color: '#ffd166' });
+    if (m.vision > 0) chips.push({ text: '+' + m.vision + 'V', color: '#9ecbff' });
+    if (m.def > 0) chips.push({ text: '+' + m.def + 'D', color: '#ffd166' });
+  }
+  return chips;
+}
+
+function drawUnitBonuses(u, px) {
+  const chips = unitBonusChips(u);
+  if (!chips.length) return; // niente bonus (pianura/acqua + nessuna tech): zero overlay
+  const cx = u.x * px + px / 2, cy = u.y * px + px / 2, r = px * 0.30;
+  const padX = Math.max(2, px * 0.08), gap = Math.max(1, px * 0.05);
+  let f = Math.max(7, Math.round(px * 0.24)); // font iniziale ~24% della casella
+  let list = chips.slice();
+  const totalWidth = (arr, fs) => {
+    ctx.font = `700 ${fs}px 'Segoe UI', sans-serif`;
+    let w = 0;
+    for (const c of arr) w += ctx.measureText(c.text).width + padX * 2;
+    return w + gap * Math.max(0, arr.length - 1);
+  };
+  // 1) riduco il font finche' la fila sta dentro la cella (minimo leggibile 6px)
+  while (f > 6 && totalWidth(list, f) > px - 2) f -= 1;
+  // 2) se ancora larga scarto i bonus a priorita' piu' bassa (mai quello del terreno)
+  while (list.length > 1 && totalWidth(list, f) > px - 2) list.pop();
+
+  const h = Math.max(8, f + 4);
+  ctx.font = `700 ${f}px 'Segoe UI', sans-serif`;
+  let total = 0;
+  const widths = list.map(c => { const w = ctx.measureText(c.text).width + padX * 2; total += w; return w; });
+  total += gap * (list.length - 1);
+
+  // Posizione: sopra lo sprite, SEMPRE clamped dentro la cella (mai sui gutter)
+  let x0 = cx - total / 2;
+  x0 = Math.max(u.x * px + 1, Math.min(x0, u.x * px + px - 1 - total));
+  const y0 = Math.max(u.y * px + 1, cy - r - h);
+
+  let x = x0;
+  for (let i = 0; i < list.length; i++) {
+    rr(ctx, x, y0, widths[i], h, h / 2);
+    ctx.fillStyle = 'rgba(8,10,14,0.85)'; // pill opaca: leggibile su qualsiasi biome
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = list[i].color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(list[i].text, x + widths[i] / 2, y0 + h / 2 + 0.5);
+    x += widths[i] + gap;
+  }
+}
+
 // ================= DISEGNO UNITA' — corpo in volume + emblema classe SVG =================
 function drawUnit(u, px, playerById) {
   const p = playerById[u.owner_id];
@@ -852,9 +921,13 @@ function drawUnit(u, px, playerById) {
   ctx.ellipse(cx, cy + r * 0.75, r * 0.85, r * 0.32, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // esausta (ha gia' agito): desaturata; le unita' "strike" restano attive finche' non attaccano
-  const exhausted = u.owner_id === myId && isExhausted(u);
-  if (exhausted) ctx.globalAlpha = 0.5;
+  // Stato visivo "pronta ad agire": una unita' propria e' attiva SOLO nel proprio
+  // turno E se non ha esaurito le azioni del round (has_moved/has_attacked).
+  // Fuori dal proprio turno TUTTE le proprie pedine appaiono esauste: cosi' lo
+  // stato grafico resta sincronizzato con is_current + hasMoved anche dopo la
+  // conferma della fine turno (niente pedine "fantasma" che sembrano movibili).
+  const activeNow = u.owner_id === myId && state.self.is_current && !isExhausted(u);
+  if (u.owner_id === myId && !activeNow) ctx.globalAlpha = 0.5;
 
   // corpo: gradiente radiale nel colore della FAZIONE del proprietario (volume sferico)
   const bg = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.15, cx, cy, r);
@@ -902,6 +975,10 @@ function drawUnit(u, px, playerById) {
     ctx.fillStyle = iconColor; // fallback: punto centrale
     ctx.beginPath(); ctx.arc(cx, cy, r * 0.25, 0, Math.PI * 2); ctx.fill();
   }
+
+  // overlay bonus (terreno + tech) sopra lo sprite: eredita l'alpha corrente,
+  // quindi sulle unita' esauste appare anch'esso attenuato
+  drawUnitBonuses(u, px);
 
   ctx.globalAlpha = 1;
 
@@ -990,11 +1067,13 @@ function handleTileClick(x, y) {
   //    pannello completo con dati unita' + terreno + struttura sottostante
   if (u) { hideBuyPanel(); clearSelection(); showInspector(x, y); return; }
 
-  // 4) click su citta' o villaggio proprio -> pannello addestramento (+ inspector con coordinate)
+  // 4) click su citta' o villaggio proprio -> pannello addestramento (+ inspector con coordinate).
+  //    Il kind ('city'|'village') viaggia sempre col punto: i PK delle due tabelle
+  //    sono autoincrement separati e gli ID possono coincidere.
   const c = cityAt(x, y);
-  if (c && c.owner_id === myId) { showBuyPanel(c.id, c.name); showInspector(x, y); return; }
+  if (c && c.owner_id === myId) { showBuyPanel(c.id, c.name, 'city'); showInspector(x, y); return; }
   const v = villageAt(x, y);
-  if (v && v.owner_id === myId) { showBuyPanel(v.id, v.name + ' (villaggio)'); showInspector(x, y); return; }
+  if (v && v.owner_id === myId) { showBuyPanel(v.id, v.name + ' (villaggio)', 'village'); showInspector(x, y); return; }
 
   // 5) casella vuota: mostra comunque terreno/struttura visibili
   hideBuyPanel();
@@ -1091,16 +1170,19 @@ function renderUnitInfo() {
 // Pannello addestramento: lo stato (oro/disponibilita') si aggiorna a ogni state_update.
 // LIMITE SPAWN: se la casella della struttura e' occupata da un'unita', i bottoni
 // restano disabilitati finche' la casella non si libera (validato anche dal server).
-function showBuyPanel(pointId, pointName) {
-  buyPoint = { id: pointId, name: pointName };
+function showBuyPanel(pointId, pointName, kind) {
+  buyPoint = { id: pointId, name: pointName, kind };
   renderBuyPanel();
 }
 
 function pointTileOccupied() {
   if (!buyPoint || !state) return false;
-  const c = state.cities.find(c => c.id === buyPoint.id);
-  const v = state.villages.find(v => v.id === buyPoint.id);
-  const pt = c || v;
+  // Cerco SOLO nella tabella del kind dichiarato: i PK di Cities e Villages sono
+  // autoincrement separati (gli ID possono coincidere tra le due tabelle!) — un
+  // lookup "a tentativi" potrebbe prendere la casella sbagliata.
+  const pt = buyPoint.kind === 'village'
+    ? state.villages.find(v => v.id === buyPoint.id)
+    : state.cities.find(c => c.id === buyPoint.id);
   if (!pt) return false;
   const t = tileXY[pt.tile_id];
   if (!t) return false;
@@ -1120,7 +1202,8 @@ function renderBuyPanel() {
     // il bottone e' flex con gap: niente spazio libero tra costo e SVG
     btn.innerHTML = `${esc(s.name)} — ${s.cost}${ICONS.svg('gold-coin', 26)}`;
     btn.disabled = occupied || state.self.gold < s.cost || !state.self.can_act;
-    btn.onclick = () => socket.emit('buy_unit', { pointId: buyPoint.id, type: key });
+    // pointKind esplicito: il server consulta solo la tabella dichiarata (niente ambiguita' di ID)
+    btn.onclick = () => socket.emit('buy_unit', { pointId: buyPoint.id, type: key, pointKind: buyPoint.kind });
     panel.appendChild(btn);
   }
   panel.classList.remove('hidden');
@@ -1275,6 +1358,7 @@ function buildGuideTab(tabId, content) {
       ['Turni sequenziali', "I giocatori giocano uno alla volta nell'ordine di ingresso in lobby. Il turno passa solo quando il giocatore corrente conferma «Fine Turno»; nel frattempo puoi ispezionare qualsiasi casella visibile."],
       ['Annullamento mosse (Undo)', `Durante il tuo turno ogni azione (mossa, attacco, addestramento, tecnologia) è annullabile con «${ICONS.svg('undo', 26)} Annulla Mossa» (fino a 30 per turno). Confermando la fine turno lo stack si svuota: da quel punto le mosse non sono più reversibili.`],
       ['Fog of War', `Le caselle inesplorate restano nascoste. La visione guadagnata muovendo o attaccando durante il tuo turno viene rivelata SOLO quando confermi «Fine Turno». Città e villaggi hanno visione permanente di raggio ${e.visionCityRadius}.`],
+      ['Mosse a rilascio ritardato', "Le azioni del giocatore in turno (mosse, attacchi, conquiste) restano nascoste agli altri giocatori finché non conferma «Fine Turno»: le posizioni nemiche si aggiornano solo a turno chiuso, come la visione."],
       ['Villaggi e limite spawn', `I villaggi neutrali danno +${e.villageIncome} oro/round e diventano punti addestramento se conquistati. Massimo 1 unità per casella con struttura: finché la casella è occupata l'addestramento lì è disabilitato (regola validata anche dal server).`],
       ['Ricompense kill', "Distruggendo un'unità nemica ottieni oro pari a metà del suo costo di addestramento (arrotondato per eccesso) più 1 Punto Tecnologia."],
       ['Economia e incasso', `Introito base ${e.baseIncome} oro/round, +${e.cityIncome} per ogni città posseduta, +${e.villageIncome} per ogni villaggio, più i bonus delle tecnologie. L'incasso avviene quando il ciclo del round torna al primo giocatore.`],
@@ -1290,8 +1374,8 @@ function buildGuideTab(tabId, content) {
         `${t.name} ${t.fx}`));
     }
     entries.push(entryEl(
-      '<b>Movimento</b><br>Le unità si muovono a passi ortogonali (niente diagonali) entro il proprio MOV. Le montagne sono attraversabili solo da unità con trait montagna, l\'acqua solo da unità con trait nuoto. Le unità nemiche bloccano il percorso; quelle amiche possono impilarsi.',
-      'movimento passi montagne acqua nemici blocchi diagonali'));
+      '<b>Movimento</b><br>Le unità si muovono a passi ortogonali (niente diagonali) entro il proprio MOV. Le montagne sono attraversabili solo da unità con trait montagna, l\'acqua solo da unità con trait nuoto. Ogni casella può contenere al massimo un\'unità (amica o nemica): le caselle occupate bloccano atterraggio e attraversamento.',
+      'movimento passi montagne acqua nemici blocchi diagonali occupazione singola'));
   } else if (tabId === 'techs') {
     entries.push(entryEl(
       '<b>Come funziona</b><br>Ogni fazione ha 4 perk globali acquistabili con i Punti Tecnologia (TP): +1 TP a ogni round completato e +1 per ogni unità nemica eliminata. I bonus si applicano a tutte le tue unità (o alle unità addestrate, nel caso degli HP) finché la partita dura.',

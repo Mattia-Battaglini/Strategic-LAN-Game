@@ -197,10 +197,13 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
-  socket.on('buy_unit', ({ pointId, type }) => {
+  // pointKind ('city'|'village') e' OBBLIGATORIO: i PK di Cities e Villages sono
+  // autoincrement separati (gli ID possono coincidere), quindi il server consulta
+  // solo la tabella dichiarata dal client — nessun lookup ambiguo.
+  socket.on('buy_unit', ({ pointId, type, pointKind }) => {
     const player = myPlayer(socket);
     if (!player) return;
-    const res = G.performBuyUnit(db, player, pointId, type);
+    const res = G.performBuyUnit(db, player, pointId, type, pointKind);
     if (!res.ok) return socket.emit('error_msg', res.error);
     broadcastState();
   });
